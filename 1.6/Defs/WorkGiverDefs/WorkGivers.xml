@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       R⁴ WorkGiver: picks up gizmo-designated items for processing
+       Uses Crafting work type so it respects pawn work priorities.
+       ════════════════════════════════════════════════════════════════════ -->
+  <WorkGiverDef>
+    <defName>RRRR_WorkGiver_R4</defName>
+    <label>process R⁴ designated items</label>
+    <giverClass>RRRR.WorkGiver_R4</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>50</priorityInType>
+    <verb>process</verb>
+    <gerund>processing designated items</gerund>
+  </WorkGiverDef>
+
+</Defs>

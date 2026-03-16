@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       R⁴ Special Thing Filters
+       Used in bill filtering UI for automated batch processing (M4).
+       Defined now so the C# filter workers can reference them.
+       ════════════════════════════════════════════════════════════════════ -->
+
+  <SpecialThingFilterDef>
+    <defName>RRRR_Filter_Tainted</defName>
+    <label>RRRR_Filter_Tainted</label>
+    <workerClass>RRRR.SpecialThingFilterWorker_Tainted</workerClass>
+    <parentCategory>Apparel</parentCategory>
+    <allowedByDefault>false</allowedByDefault>
+  </SpecialThingFilterDef>
+
+  <SpecialThingFilterDef>
+    <defName>RRRR_Filter_Damaged</defName>
+    <label>RRRR_Filter_Damaged</label>
+    <workerClass>RRRR.SpecialThingFilterWorker_Damaged</workerClass>
+    <allowedByDefault>false</allowedByDefault>
+  </SpecialThingFilterDef>
+
+  <SpecialThingFilterDef>
+    <defName>RRRR_Filter_MarkedRecycle</defName>
+    <label>RRRR_Filter_MarkedRecycle</label>
+    <workerClass>RRRR.SpecialThingFilterWorker_MarkedRecycle</workerClass>
+    <allowedByDefault>false</allowedByDefault>
+  </SpecialThingFilterDef>
+
+  <SpecialThingFilterDef>
+    <defName>RRRR_Filter_MarkedRepair</defName>
+    <label>RRRR_Filter_MarkedRepair</label>
+    <workerClass>RRRR.SpecialThingFilterWorker_MarkedRepair</workerClass>
+    <allowedByDefault>false</allowedByDefault>
+  </SpecialThingFilterDef>
+
+  <SpecialThingFilterDef>
+    <defName>RRRR_Filter_MarkedClean</defName>
+    <label>RRRR_Filter_MarkedClean</label>
+    <workerClass>RRRR.SpecialThingFilterWorker_MarkedClean</workerClass>
+    <allowedByDefault>false</allowedByDefault>
+  </SpecialThingFilterDef>
+
+</Defs>

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <!-- Settings UI -->
+  <RRRR_SettingsTitle>R⁴: Reduce, Reuse, Recycle</RRRR_SettingsTitle>
+
+  <RRRR_Settings_Header_General>General</RRRR_Settings_Header_General>
+  <RRRR_Settings_ConditionExponent>Condition exponent</RRRR_Settings_ConditionExponent>
+  <RRRR_Settings_ConditionExponent_Tip>Controls how steeply damaged items lose value. Higher = more punishing for low-HP items.</RRRR_Settings_ConditionExponent_Tip>
+  <RRRR_Settings_GlobalEfficiency>Global efficiency multiplier</RRRR_Settings_GlobalEfficiency>
+  <RRRR_Settings_GlobalEfficiency_Tip>Master dial that scales all material returns and costs.</RRRR_Settings_GlobalEfficiency_Tip>
+
+  <RRRR_Settings_Header_Recycle>Recycle</RRRR_Settings_Header_Recycle>
+  <RRRR_Settings_RecycleWorkFactor>Recycle work factor</RRRR_Settings_RecycleWorkFactor>
+  <RRRR_Settings_RecycleWorkFactor_Tip>Work amount per unit of market value. Higher = slower recycling.</RRRR_Settings_RecycleWorkFactor_Tip>
+  <RRRR_Settings_BaseSkillReturn>Base skill return (skill 0)</RRRR_Settings_BaseSkillReturn>
+  <RRRR_Settings_MaxSkillReturn>Max skill return (skill 20)</RRRR_Settings_MaxSkillReturn>
+  <RRRR_Settings_SkillExponent>Skill curve exponent</RRRR_Settings_SkillExponent>
+  <RRRR_Settings_SkillExponent_Tip>Controls skill curve shape. Lower = faster ramp at low skill. Higher = more linear.</RRRR_Settings_SkillExponent_Tip>
+  <RRRR_Settings_TaintedReturnFraction>Tainted item return fraction</RRRR_Settings_TaintedReturnFraction>
+  <RRRR_Settings_TaintedReturnFraction_Tip>Material return multiplier for tainted items. 0.5 = half return.</RRRR_Settings_TaintedReturnFraction_Tip>
+  <RRRR_Settings_MinimumReturnGuarantee>Guarantee minimum 1 material</RRRR_Settings_MinimumReturnGuarantee>
+  <RRRR_Settings_MinimumReturnGuarantee_Tip>If enabled, recycling always returns at least 1 unit of the primary material.</RRRR_Settings_MinimumReturnGuarantee_Tip>
+  <RRRR_Settings_ComponentPenalty>Component return penalty</RRRR_Settings_ComponentPenalty>
+  <RRRR_Settings_AdvComponentPenalty>Adv. component return penalty</RRRR_Settings_AdvComponentPenalty>
+  <RRRR_Settings_ChemfuelPenalty>Chemfuel return penalty</RRRR_Settings_ChemfuelPenalty>
+
+  <RRRR_Settings_Header_Repair>Repair</RRRR_Settings_Header_Repair>
+  <RRRR_Settings_RepairCyclePercent>HP restored per cycle</RRRR_Settings_RepairCyclePercent>
+  <RRRR_Settings_RepairCostMultiplier>Repair cost multiplier</RRRR_Settings_RepairCostMultiplier>
+  <RRRR_Settings_RepairCostMultiplier_Tip>Material cost premium vs recycling. 1.2 = costs 20% more than recycle would return.</RRRR_Settings_RepairCostMultiplier_Tip>
+  <RRRR_Settings_BaseRepairSuccess>Base repair success (skill 0)</RRRR_Settings_BaseRepairSuccess>
+  <RRRR_Settings_RepairSkillBonus>Success bonus per skill level</RRRR_Settings_RepairSkillBonus>
+  <RRRR_Settings_FailureHPLoss>Minor failure HP loss</RRRR_Settings_FailureHPLoss>
+  <RRRR_Settings_CriticalFailureHPLoss>Critical failure HP loss</RRRR_Settings_CriticalFailureHPLoss>
+  <RRRR_Settings_CriticalFailureBaseChance>Critical failure base chance</RRRR_Settings_CriticalFailureBaseChance>
+  <RRRR_Settings_QualityLossThreshold>Quality loss HP threshold</RRRR_Settings_QualityLossThreshold>
+  <RRRR_Settings_QualityLossThreshold_Tip>Below this HP fraction, critical failures lower quality instead of HP.</RRRR_Settings_QualityLossThreshold_Tip>
+
+  <RRRR_Settings_Header_Clean>Clean (Remove Taint)</RRRR_Settings_Header_Clean>
+  <RRRR_Settings_CleanCostFraction>Clean material cost fraction</RRRR_Settings_CleanCostFraction>
+  <RRRR_Settings_CleanCostFraction_Tip>Fraction of item's full material cost consumed to remove taint.</RRRR_Settings_CleanCostFraction_Tip>
+  <RRRR_Settings_CleanWorkFactor>Clean work factor</RRRR_Settings_CleanWorkFactor>
+
+  <RRRR_Settings_ResetDefaults>Reset to defaults</RRRR_Settings_ResetDefaults>
+
+  <!-- Gizmo labels and descriptions -->
+  <RRRR_Gizmo_Recycle>Recycle</RRRR_Gizmo_Recycle>
+  <RRRR_Gizmo_Recycle_Desc>Mark this item for recycling. A crafter will break it down into raw materials at the nearest appropriate workbench.</RRRR_Gizmo_Recycle_Desc>
+  <RRRR_Gizmo_CancelRecycle>Cancel recycle</RRRR_Gizmo_CancelRecycle>
+  <RRRR_Gizmo_CancelRecycle_Desc>Remove the recycle designation from this item.</RRRR_Gizmo_CancelRecycle_Desc>
+
+  <RRRR_Gizmo_Repair>Repair</RRRR_Gizmo_Repair>
+  <RRRR_Gizmo_Repair_Desc>Mark this item for repair. A crafter will restore its hit points at the nearest appropriate workbench, consuming materials.</RRRR_Gizmo_Repair_Desc>
+  <RRRR_Gizmo_CancelRepair>Cancel repair</RRRR_Gizmo_CancelRepair>
+  <RRRR_Gizmo_CancelRepair_Desc>Remove the repair designation from this item.</RRRR_Gizmo_CancelRepair_Desc>
+
+  <RRRR_Gizmo_Clean>Remove taint</RRRR_Gizmo_Clean>
+  <RRRR_Gizmo_Clean_Desc>Mark this tainted apparel for cleaning. A crafter will remove the corpse taint at the nearest tailoring bench, consuming materials.</RRRR_Gizmo_Clean_Desc>
+  <RRRR_Gizmo_CancelClean>Cancel cleaning</RRRR_Gizmo_CancelClean>
+  <RRRR_Gizmo_CancelClean_Desc>Remove the cleaning designation from this item.</RRRR_Gizmo_CancelClean_Desc>
+
+  <RRRR_Gizmo_NoMaterials>No recoverable materials</RRRR_Gizmo_NoMaterials>
+
+  <!-- Job strings -->
+  <RRRR_JobString_Recycle>Recycling {0}.</RRRR_JobString_Recycle>
+  <RRRR_JobString_Repair>Repairing {0}.</RRRR_JobString_Repair>
+  <RRRR_JobString_Clean>Cleaning taint from {0}.</RRRR_JobString_Clean>
+
+  <!-- Letters / notifications -->
+  <RRRR_Letter_QualityLoss_Label>Repair mishap</RRRR_Letter_QualityLoss_Label>
+  <RRRR_Letter_QualityLoss_Text>{0} had a critical failure while repairing {1}. Its quality dropped from {2} to {3}.</RRRR_Letter_QualityLoss_Text>
+
+  <!-- Recipe labels -->
+  <RRRR_Recipe_RecycleApparel>Recycle apparel</RRRR_Recipe_RecycleApparel>
+  <RRRR_Recipe_RecycleWeaponMelee>Recycle melee weapon</RRRR_Recipe_RecycleWeaponMelee>
+  <RRRR_Recipe_RecycleWeaponRanged>Recycle ranged weapon</RRRR_Recipe_RecycleWeaponRanged>
+  <RRRR_Recipe_RepairApparel>Repair apparel</RRRR_Recipe_RepairApparel>
+  <RRRR_Recipe_RepairWeaponMelee>Repair melee weapon</RRRR_Recipe_RepairWeaponMelee>
+  <RRRR_Recipe_RepairWeaponRanged>Repair ranged weapon</RRRR_Recipe_RepairWeaponRanged>
+  <RRRR_Recipe_CleanApparel>Remove taint from apparel</RRRR_Recipe_CleanApparel>
+
+  <!-- Filter labels -->
+  <RRRR_Filter_Tainted>Tainted</RRRR_Filter_Tainted>
+  <RRRR_Filter_Damaged>Damaged</RRRR_Filter_Damaged>
+  <RRRR_Filter_MarkedRecycle>Marked for recycle</RRRR_Filter_MarkedRecycle>
+  <RRRR_Filter_MarkedRepair>Marked for repair</RRRR_Filter_MarkedRepair>
+  <RRRR_Filter_MarkedClean>Marked for cleaning</RRRR_Filter_MarkedClean>
+</LanguageData>

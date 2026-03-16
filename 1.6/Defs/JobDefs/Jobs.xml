@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       R⁴ Job: Recycle (gizmo-driven)
+       TargetA = workbench, TargetB = item to recycle
+       ════════════════════════════════════════════════════════════════════ -->
+  <JobDef>
+    <defName>RRRR_Recycle</defName>
+    <driverClass>RRRR.JobDriver_R4Recycle</driverClass>
+    <reportString>RRRR_JobString_Recycle</reportString>
+    <allowOpportunisticPrefix>false</allowOpportunisticPrefix>
+  </JobDef>
+
+  <!-- M2: Repair job
+  <JobDef>
+    <defName>RRRR_Repair</defName>
+    <driverClass>RRRR.JobDriver_R4Repair</driverClass>
+    <reportString>RRRR_JobString_Repair</reportString>
+    <allowOpportunisticPrefix>false</allowOpportunisticPrefix>
+  </JobDef>
+  -->
+
+  <!-- M3: Clean job
+  <JobDef>
+    <defName>RRRR_Clean</defName>
+    <driverClass>RRRR.JobDriver_R4Clean</driverClass>
+    <reportString>RRRR_JobString_Clean</reportString>
+    <allowOpportunisticPrefix>false</allowOpportunisticPrefix>
+  </JobDef>
+  -->
+
+</Defs>

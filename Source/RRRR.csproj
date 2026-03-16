@@ -1,0 +1,51 @@
+<!--
+  R⁴: Reduce, Reuse, Recycle — RimWorld Mod
+  SDK-style csproj, net48, auto-include all .cs files
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\RimWorld.Paths.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RRRR</RootNamespace>
+    <AssemblyName>RRRR</AssemblyName>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Description>Recycle, repair, and clean weapons and apparel at existing workbenches.</Description>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\1.6\Assemblies\</OutputPath>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!-- Core references -->
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(RimWorldManaged)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(RimWorldManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Harmony -->
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>$(HarmonyAssemblies)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Unity UI module (settings window) -->
+  <ItemGroup>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(RimWorldManaged)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

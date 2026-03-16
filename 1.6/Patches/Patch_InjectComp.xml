@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       R⁴: Inject CompRecyclable into all apparel and weapons.
+       
+       Strategy: Target ThingDefs that have thingCategories containing
+       Apparel, WeaponsMelee, or WeaponsRanged. Use PatchOperationSequence
+       with a Test to only patch defs that already have a <comps> node.
+       
+       The Harmony fallback patch in ThingDef_ResolveReferences_Patch
+       catches anything these XPath expressions miss (e.g. modded items
+       without standard thingCategories, or dynamically generated defs).
+       ════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Apparel (via thingCategories) ───────────────────────────────── -->
+  <Operation Class="PatchOperationSequence">
+    <success>Always</success>
+    <operations>
+      <li Class="PatchOperationTest">
+        <xpath>Defs/ThingDef[thingCategories/li="Apparel"]/comps</xpath>
+        <success>Normal</success>
+      </li>
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/ThingDef[thingCategories/li="Apparel"]/comps</xpath>
+        <value>
+          <li Class="RRRR.CompProperties_Recyclable" />
+        </value>
+      </li>
+    </operations>
+  </Operation>
+
+  <!-- ── Headgear (often categorized separately) ─────────────────────── -->
+  <Operation Class="PatchOperationSequence">
+    <success>Always</success>
+    <operations>
+      <li Class="PatchOperationTest">
+        <xpath>Defs/ThingDef[thingCategories/li="Headgear"]/comps</xpath>
+        <success>Normal</success>
+      </li>
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/ThingDef[thingCategories/li="Headgear"]/comps</xpath>
+        <value>
+          <li Class="RRRR.CompProperties_Recyclable" />
+        </value>
+      </li>
+    </operations>
+  </Operation>
+
+  <!-- ── Melee weapons ───────────────────────────────────────────────── -->
+  <Operation Class="PatchOperationSequence">
+    <success>Always</success>
+    <operations>
+      <li Class="PatchOperationTest">
+        <xpath>Defs/ThingDef[thingCategories/li="WeaponsMelee"]/comps</xpath>
+        <success>Normal</success>
+      </li>
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/ThingDef[thingCategories/li="WeaponsMelee"]/comps</xpath>
+        <value>
+          <li Class="RRRR.CompProperties_Recyclable" />
+        </value>
+      </li>
+    </operations>
+  </Operation>
+
+  <!-- ── Ranged weapons ──────────────────────────────────────────────── -->
+  <Operation Class="PatchOperationSequence">
+    <success>Always</success>
+    <operations>
+      <li Class="PatchOperationTest">
+        <xpath>Defs/ThingDef[thingCategories/li="WeaponsRanged"]/comps</xpath>
+        <success>Normal</success>
+      </li>
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/ThingDef[thingCategories/li="WeaponsRanged"]/comps</xpath>
+        <value>
+          <li Class="RRRR.CompProperties_Recyclable" />
+        </value>
+      </li>
+    </operations>
+  </Operation>
+
+  <!-- ── Grenades (subcategory of ranged, sometimes separate) ────────── -->
+  <Operation Class="PatchOperationSequence">
+    <success>Always</success>
+    <operations>
+      <li Class="PatchOperationTest">
+        <xpath>Defs/ThingDef[thingCategories/li="Grenades"]/comps</xpath>
+        <success>Normal</success>
+      </li>
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/ThingDef[thingCategories/li="Grenades"]/comps</xpath>
+        <value>
+          <li Class="RRRR.CompProperties_Recyclable" />
+        </value>
+      </li>
+    </operations>
+  </Operation>
+
+</Patch>
