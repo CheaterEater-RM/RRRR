@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+  <!-- Designator labels -->
+  <R4_RecycleLabel>Recycle</R4_RecycleLabel>
+  <R4_RecycleDesc>Designate items for recycling. A colonist will break them down at a workbench to recover materials.</R4_RecycleDesc>
+  
+  <!-- Rejection messages -->
+  <R4_MustDesignateRecyclable>Must designate a recyclable item (weapon or apparel).</R4_MustDesignateRecyclable>
+  <R4_AlreadyDesignatedRecycle>Already designated for recycling.</R4_AlreadyDesignatedRecycle>
+</LanguageData>

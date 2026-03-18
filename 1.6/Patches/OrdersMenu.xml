@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R4 Orders Menu Integration
+  Injects the R4 designator into the Orders tab of the architect menu.
+  This is the map-order designator (drag to designate multiple items).
+  The gizmo (select-item button) is injected separately via Harmony postfix.
+-->
+<Patch>
+  <Operation Class="PatchOperationAdd">
+    <xpath>*/DesignationCategoryDef[defName="Orders"]/specialDesignatorClasses</xpath>
+    <value>
+      <li>RRRR.Designator_RecycleThing</li>
+    </value>
+  </Operation>
+</Patch>
