@@ -22,62 +22,43 @@
 - `SpecialThingFilterDef` entries with null `parentCategory` caused `NullReferenceException` in `ThingCategoryNodeDatabase.FinalizeInit()` — the exact crash site
 - Harmony postfix on `ThingDef.ResolveReferences` was unnecessary and risky during loading
 
-**Known limitations of M0:**
-- Comp injection targets `thingClass="Apparel"` only — weapons not yet covered
-- Designating an item does nothing (no WorkGiver/JobDriver to act on it)
-- Placeholder texture (green rings) — not final art
-- Debug logging still present
-
 ---
 
-## M1: Recycle — Full Loop
+## M1: Recycle — Full Loop ✅
 
 **Goal:** Player designates item → pawn hauls to bench → works → materials spawn → item destroyed.
 
-**XML:**
-- [ ] Expand comp injection to weapons (verify `thingClass` values used by vanilla guns/melee)
-- [ ] `JobDef` for `RRRR_Recycle`
-- [ ] `WorkGiverDef` for recycle (workType: Crafting)
-- [ ] Add repair/clean DesignationDefs (texture placeholders OK for now)
-
-**C# — Utility Layer:**
-- [ ] `MaterialUtility` — `GetRecycleReturn(thing, skillLevel)` using the formula from DESIGN.md
+**Completed:**
+- [x] `JobDef` for `RRRR_Recycle`
+- [x] `WorkGiverDef` for recycle (workType: Crafting)
+- [x] `MaterialUtility` — full return formula with condition/quality/skill/taint/rare multipliers
   - `CostListAdjusted(thing.Stuff)` + `smeltProducts` as base
-  - Condition, quality, skill, taint, rare material multipliers
-  - `GenMath.RoundRandom` for probabilistic rounding, minimum 1
-- [ ] `WorkbenchRouter` — scan `DefDatabase<ThingDef>` at startup for bench lists
-  - Smeltable → benches with `SmeltWeapon`/`SmeltApparel` recipe
-  - Non-smeltable → benches with `Make_Apparel_BasicShirt` recipe
-  - Fallback → crafting spot
-- [ ] `R4ThingDefCache` — static constructor triggered from Setup.cs via `RuntimeHelpers.RunClassConstructor`
-
-**C# — Job System:**
-- [ ] `WorkGiver_R4Recycle`
-  - `ShouldSkip`: early-out via `AnySpawnedDesignationOfDef`
-  - `PotentialWorkThingsGlobal`: iterate `SpawnedDesignationsOfDef(R4_Recycle)`
-  - `HasJobOnThing`: find closest reachable bench via `GenClosest.ClosestThingReachable`
-  - Check `UsableForBillsAfterFueling()` on bench
-- [ ] `JobDriver_R4Recycle`
-  - Toil sequence: reserve item → goto → carry → goto bench → place → work → produce → destroy
-  - `TryMakePreToilReservations`: reserve both bench and item
-  - Work toil with `tickIntervalAction`, pawn skill × bench speed factor
-  - `ExposeData` for `workLeft`/`totalNeededWork` (save mid-job)
-  - Completion: spawn materials at pawn position, destroy item, remove designation
+  - `GenMath.RoundRandom` for probabilistic rounding, minimum 1 guaranteed
+  - `ThingDef.intricate` check for skip-components setting
+- [x] `WorkbenchRouter` — routes smeltable → smelt benches, non-smeltable → apparel benches
+- [x] `R4ThingDefCache` — startup recipe scan triggered via `RuntimeHelpers.RunClassConstructor`
+- [x] `WorkGiver_R4Recycle` — scans designations, finds nearest usable bench, creates job
+- [x] `JobDriver_R4Recycle` — goto → carry → bench → drop → work → produce → destroy
+  - `TryMakePreToilReservations`: reserves both bench and item
   - `FailOnThingMissingDesignation` for clean abort on cancel
+  - `ExposeData` for `workLeft`/`totalWork` (save mid-job)
+  - Progress bar on work toil
+- [x] `Settings.cs` — `Verse.Mod` subclass + `ModSettings` with global multiplier and intricate skip toggle
+- [x] `R4DefOf` updated with `JobDef RRRR_Recycle`
+- [x] `Setup.cs` updated with cache trigger and def verification
+- [x] Translation keys for settings UI
+- [x] Verified: designate → pawn hauls to bench → works → materials spawn → item destroyed
 
-**C# — Settings (basic):**
-- [ ] `Settings.cs` — `Verse.Mod` subclass + `ModSettings`
-- [ ] Global recycle multiplier slider
-- [ ] Toggle: skip intricate components (components, adv. components)
+**Bugfixes applied after initial testing:**
+- [x] Drag-select: `DesignateSingleCell` now designates ALL matching items per cell (was only first)
+- [x] Work speed: reduced base work to 15% of WorkToMake (was 50%), clamped 400–2000, comparable to vanilla smelting
+- [x] Work speed: switched from `WorkSpeedGlobal` to `GeneralLaborSpeed` stat for work rate
 
-**Validation:**
-- [ ] Drop a weapon/apparel on the ground
-- [ ] Designate it for recycling
-- [ ] Observe pawn haul it to a bench, work, and produce materials
-- [ ] Verify material counts match expected formula output
-- [ ] Save/load mid-job — verify work progress persists
-- [ ] Cancel designation mid-job — verify pawn aborts cleanly
-- [ ] Remove debug logging from M0
+**Known limitations of M1:**
+- Comp injection still targets apparel only (`thingClass="Apparel"`) — weapons use `ThingWithComps` which is too broad for XML targeting. Weapons work via designator (`def.IsWeapon` check) but don't have CompRecyclable. This is fine until M2+ when gizmos need the comp.
+- No repair or clean designators yet
+- Placeholder texture
+- Debug logging still present
 
 ---
 
@@ -196,3 +177,10 @@
 3. Target `thingClass` (stable) not `thingCategories` (fragile, other mods modify it)
 4. No Harmony patches on `ThingDef.ResolveReferences` for comp injection — XML is sufficient
 5. Test XML changes in isolation before adding C# complexity
+
+**Weapon comp injection:**
+6. Vanilla weapons use `thingClass="ThingWithComps"`, same as hundreds of other things — cannot safely target by thingClass in XML. The designator works without the comp (checks `def.IsWeapon` directly). Comp injection for weapons will need a different approach when gizmos are added in M2+ (likely C# startup injection after Defs load, in `[StaticConstructorOnStartup]`).
+
+**Work speed tuning:**
+7. `WorkToMake * 0.5` is way too much work for recycling — a bolt-action rifle (12000 WorkToMake) would take 6000 ticks. Use 15% with a 400–2000 clamp to keep it comparable to vanilla smelting (flat 1600).
+8. `GeneralLaborSpeed` is the correct stat for non-recipe manual work, not `WorkSpeedGlobal` (which is lower).

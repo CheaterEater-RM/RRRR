@@ -94,7 +94,10 @@ namespace RRRR
             {
                 pawn.rotationTracker.FaceTarget(Bench);
 
-                float pawnSpeed = pawn.GetStatValue(StatDefOf.WorkSpeedGlobal, true);
+                // GeneralLaborSpeed is the standard stat for non-recipe manual work.
+                // Typical values: ~1.0 for healthy pawns, higher with traits/bionics.
+                // Bench factor from WorkTableWorkSpeedFactor (typically 1.0 for crafting benches).
+                float pawnSpeed = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
                 float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
                 float workDone = pawnSpeed * benchFactor;
 

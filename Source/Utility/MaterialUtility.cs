@@ -23,16 +23,20 @@ namespace RRRR
 
         /// <summary>
         /// Calculate the total work ticks needed for recycling an item.
-        /// Scales with the item's base work-to-make stat.
+        /// Recycling is destructive work — faster than crafting.
+        /// Vanilla smelting uses a flat 1600 work. We scale lightly with
+        /// the item's crafting cost but cap it to keep recycling snappy.
         /// </summary>
         public static float GetRecycleWorkAmount(Thing thing)
         {
             float workToMake = thing.def.GetStatValueAbstract(StatDefOf.WorkToMake, thing.Stuff);
             if (workToMake <= 0f)
-            {
                 workToMake = 1000f;
-            }
-            return workToMake * 0.5f;
+
+            // 15% of original crafting time, clamped between 400 and 2000
+            // For reference: vanilla SmeltWeapon is a flat 1600
+            float work = workToMake * 0.15f;
+            return UnityEngine.Mathf.Clamp(work, 400f, 2000f);
         }
 
         /// <summary>
@@ -80,6 +84,8 @@ namespace RRRR
                         product.stackCount = count;
                         if (GenPlace.TryPlaceThing(product, spawnPos, map, ThingPlaceMode.Near))
                             results.Add(product);
+                        else
+                            product.Destroy();
                     }
                 }
             }
@@ -97,6 +103,8 @@ namespace RRRR
                     product.stackCount = entry.count;
                     if (GenPlace.TryPlaceThing(product, spawnPos, map, ThingPlaceMode.Near))
                         results.Add(product);
+                    else
+                        product.Destroy();
                 }
             }
 
@@ -110,6 +118,8 @@ namespace RRRR
                     product.stackCount = 1;
                     if (GenPlace.TryPlaceThing(product, spawnPos, map, ThingPlaceMode.Near))
                         results.Add(product);
+                    else
+                        product.Destroy();
                 }
             }
 
