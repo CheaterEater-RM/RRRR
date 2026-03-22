@@ -3,8 +3,15 @@
   <!-- Designator labels -->
   <R4_RecycleLabel>Recycle</R4_RecycleLabel>
   <R4_RecycleDesc>Designate items for recycling. A colonist will break them down at a workbench to recover materials.</R4_RecycleDesc>
-  
+
   <!-- Rejection messages -->
   <R4_MustDesignateRecyclable>Must designate a recyclable item (weapon or apparel).</R4_MustDesignateRecyclable>
   <R4_AlreadyDesignatedRecycle>Already designated for recycling.</R4_AlreadyDesignatedRecycle>
+
+  <!-- Settings UI -->
+  <R4_Settings_RecycleHeader>Recycle Settings</R4_Settings_RecycleHeader>
+  <R4_Settings_RecycleMult>Material return multiplier</R4_Settings_RecycleMult>
+  <R4_Settings_SkipIntricate>Skip intricate components</R4_Settings_SkipIntricate>
+  <R4_Settings_SkipIntricate_Tip>If enabled, components and advanced components are not returned when recycling.</R4_Settings_SkipIntricate_Tip>
+  <R4_Settings_Reset>Reset to defaults</R4_Settings_Reset>
 </LanguageData>

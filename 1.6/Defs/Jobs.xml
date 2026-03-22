@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <JobDef>
+    <defName>RRRR_Recycle</defName>
+    <driverClass>RRRR.JobDriver_R4Recycle</driverClass>
+    <reportString>recycling TargetA.</reportString>
+    <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
+  </JobDef>
+</Defs>

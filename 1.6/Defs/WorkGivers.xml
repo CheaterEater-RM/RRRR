@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <WorkGiverDef>
+    <defName>RRRR_Recycle</defName>
+    <label>recycle designated items</label>
+    <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>50</priorityInType>
+    <verb>recycle</verb>
+    <gerund>recycling designated items</gerund>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
+</Defs>

@@ -12,6 +12,7 @@ namespace RRRR
     public static class R4DefOf
     {
         public static DesignationDef R4_Recycle;
+        public static JobDef RRRR_Recycle;
 
         static R4DefOf()
         {
