@@ -53,6 +53,7 @@
 - [x] Drag-select: `DesignateSingleCell` now designates ALL matching items per cell (was only first)
 - [x] Work speed: reduced base work to 15% of WorkToMake (was 50%), clamped 400–2000, comparable to vanilla smelting
 - [x] Work speed: switched from `WorkSpeedGlobal` to `GeneralLaborSpeed` stat for work rate
+- [x] Null-safety: `worker?.skills?.GetSkill(...)?.Level ?? 0` in MaterialUtility
 
 **Known limitations of M1:**
 - Comp injection still targets apparel only (`thingClass="Apparel"`) — weapons use `ThingWithComps` which is too broad for XML targeting. Weapons work via designator (`def.IsWeapon` check) but don't have CompRecyclable. This is fine until M2+ when gizmos need the comp.
@@ -64,40 +65,42 @@
 
 ## M2: Repair
 
-**Goal:** Multi-cycle repair with skill checks, failure mechanics, and material consumption.
+**Goal:** Multi-cycle repair with skill checks, failure mechanics.
 
-**XML:**
-- [ ] `JobDef` for `RRRR_Repair`
-- [ ] `WorkGiverDef` for repair
-- [ ] `DesignationDef` for `R4_Repair`
-- [ ] Orders menu patch for repair designator
+**Completed:**
+- [x] `DesignationDef` for `R4_Repair` (reuses recycle texture as placeholder)
+- [x] `JobDef` for `RRRR_Repair`
+- [x] `WorkGiverDef` for repair (Crafting work type, priority 55 — slightly above recycle)
+- [x] Orders menu patch updated with `Designator_RepairThing`
+- [x] `Designator_RepairThing` — targets damaged weapons/apparel, blocks if already designated for recycle, drag-select support
+- [x] `WorkGiver_R4Repair` — scans R4_Repair designations, reuses bench-finding logic
+- [x] `JobDriver_R4Repair` — cycle-based repair
+  - Each cycle restores 10% maxHP on success
+  - Skill check per cycle: `(0.50 + skill×0.025) / techDifficulty`
+  - Minor failure: 5% HP loss
+  - Critical failure (below 50% HP, 20% of failures): 15% HP loss + quality drop
+  - Quality degradation via `CompQuality.SetQuality()` (public API, no reflection needed)
+  - Item destroyed at 0 HP: partial material reclaim
+  - `ExposeData` for cycle progress, work left, and cycle tracking
+  - Progress bar spanning all cycles
+  - Messages on failure events
+- [x] `SkillUtility` — tech difficulty from research prerequisites, success chance, failure severity
+  - Tech difficulty: Neolithic 0.80 → Archotech 2.00, scaled by settings multiplier
+  - Fallback to Industrial for items without research prerequisites
+- [x] `R4DefOf` updated with `R4_Repair` and `RRRR_Repair`
+- [x] `Patch_ReverseDesignatorDatabase` updated to inject repair gizmo
+- [x] `Settings.cs` updated with repair tech difficulty multiplier
+- [x] Translation keys for repair UI and failure messages
+- [x] `Setup.cs` updated with repair def verification, refactored VerifyDef helper
 
-**C# — Designator:**
-- [ ] `Designator_RepairThing` — only targets items below max HP
-
-**C# — Job System:**
-- [ ] `WorkGiver_R4Repair` — similar to recycle but checks `HitPoints < MaxHitPoints`
-- [ ] `JobDriver_R4Repair`
-  - Cycle-based: each cycle restores 10% maxHP
-  - Material cost per cycle: `(cycleHP/maxHP) × baseCost × 1.2 × techDifficulty`
-  - Skill check per cycle: success = `(0.50 + skill×0.025) / techDifficulty`
-  - Failure: minor (5% HP loss) or critical (<50% HP: 15% HP loss + quality drop)
-  - If HP reaches 0: destroy item, reclaim partial materials
-  - Tech difficulty scaling: Neolithic 0.80 → Archotech 2.00
-  - `ExposeData` for cycle progress
-
-**C# — Utility:**
-- [ ] `SkillUtility` — success chance calculation, failure severity rolls
-- [ ] Quality degradation via `AccessTools.Field(typeof(CompQuality), "qualityInt")`
-
-**Settings:**
-- [ ] Repair section: tech difficulty multiplier, failure chance modifier
-
-**Validation:**
-- [ ] Repair a damaged item, verify HP restoration per cycle
-- [ ] Trigger failures at low skill, verify HP loss / quality drop
+**Validation checklist:**
+- [ ] Designate damaged item for repair → pawn hauls to bench and works
+- [ ] Verify HP restoration per cycle (10% maxHP on success)
+- [ ] Trigger failures at low skill, verify HP loss / quality drop messages
 - [ ] Destroy item via repair failure, verify partial material reclaim
-- [ ] Save/load mid-repair
+- [ ] Save/load mid-repair — verify cycle progress persists
+- [ ] Cancel designation mid-repair — verify pawn aborts cleanly
+- [ ] Verify repair and recycle designators don't conflict (can't designate both)
 
 ---
 
@@ -179,8 +182,11 @@
 5. Test XML changes in isolation before adding C# complexity
 
 **Weapon comp injection:**
-6. Vanilla weapons use `thingClass="ThingWithComps"`, same as hundreds of other things — cannot safely target by thingClass in XML. The designator works without the comp (checks `def.IsWeapon` directly). Comp injection for weapons will need a different approach when gizmos are added in M2+ (likely C# startup injection after Defs load, in `[StaticConstructorOnStartup]`).
+6. Vanilla weapons use `thingClass="ThingWithComps"`, same as hundreds of other things — cannot safely target by thingClass in XML. The designator works without the comp (checks `def.IsWeapon` directly). Comp injection for weapons will need a different approach when gizmos are added.
 
 **Work speed tuning:**
 7. `WorkToMake * 0.5` is way too much work for recycling — a bolt-action rifle (12000 WorkToMake) would take 6000 ticks. Use 15% with a 400–2000 clamp to keep it comparable to vanilla smelting (flat 1600).
 8. `GeneralLaborSpeed` is the correct stat for non-recipe manual work, not `WorkSpeedGlobal` (which is lower).
+
+**Quality degradation:**
+9. `CompQuality.SetQuality(QualityCategory, ArtGenerationContext?)` is a public method — no need for `AccessTools.Field` reflection on `qualityInt`. Pass `null` for the art context when degrading quality.

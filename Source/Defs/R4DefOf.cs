@@ -3,16 +3,14 @@ using Verse;
 
 namespace RRRR
 {
-    /// <summary>
-    /// DefOf references for R4 custom defs.
-    /// RimWorld auto-populates these static fields from the DefDatabase
-    /// after Defs load, matching field names to defNames.
-    /// </summary>
     [DefOf]
     public static class R4DefOf
     {
         public static DesignationDef R4_Recycle;
+        public static DesignationDef R4_Repair;
+
         public static JobDef RRRR_Recycle;
+        public static JobDef RRRR_Repair;
 
         static R4DefOf()
         {

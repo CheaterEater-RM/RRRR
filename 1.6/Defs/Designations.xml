@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 
-  R4 Designation Defs
-  Defines the designation markers that appear on items when designated for recycling.
-  The texturePath resolves from the mod's Textures/ folder without the "Textures/" prefix.
--->
 <Defs>
   <DesignationDef>
     <defName>R4_Recycle</defName>
+    <texturePath>UI/Designators/R4RecycleDesignation</texturePath>
+    <targetType>Thing</targetType>
+  </DesignationDef>
+
+  <DesignationDef>
+    <defName>R4_Repair</defName>
     <texturePath>UI/Designators/R4RecycleDesignation</texturePath>
     <targetType>Thing</targetType>
   </DesignationDef>

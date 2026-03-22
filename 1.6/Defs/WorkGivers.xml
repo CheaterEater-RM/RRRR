@@ -12,4 +12,17 @@
       <li>Manipulation</li>
     </requiredCapacities>
   </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Repair</defName>
+    <label>repair designated items</label>
+    <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>55</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing designated items</gerund>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
 </Defs>

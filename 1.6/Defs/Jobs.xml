@@ -6,4 +6,11 @@
     <reportString>recycling TargetA.</reportString>
     <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
   </JobDef>
+
+  <JobDef>
+    <defName>RRRR_Repair</defName>
+    <driverClass>RRRR.JobDriver_R4Repair</driverClass>
+    <reportString>repairing TargetA.</reportString>
+    <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
+  </JobDef>
 </Defs>

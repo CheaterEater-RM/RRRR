@@ -21,18 +21,11 @@ namespace RRRR
             harmony.PatchAll();
             Log.Message("[R4] Harmony patches applied successfully.");
 
-            // Verify our defs loaded
-            var recycleDes = DefDatabase<DesignationDef>.GetNamedSilentFail("R4_Recycle");
-            if (recycleDes != null)
-                Log.Message("[R4] DesignationDef 'R4_Recycle' loaded OK.");
-            else
-                Log.Error("[R4] DesignationDef 'R4_Recycle' NOT FOUND!");
-
-            var recycleJob = DefDatabase<JobDef>.GetNamedSilentFail("RRRR_Recycle");
-            if (recycleJob != null)
-                Log.Message("[R4] JobDef 'RRRR_Recycle' loaded OK.");
-            else
-                Log.Error("[R4] JobDef 'RRRR_Recycle' NOT FOUND!");
+            // Verify defs loaded
+            VerifyDef<DesignationDef>("R4_Recycle");
+            VerifyDef<DesignationDef>("R4_Repair");
+            VerifyDef<JobDef>("RRRR_Recycle");
+            VerifyDef<JobDef>("RRRR_Repair");
 
             // Trigger the ThingDef cache build explicitly
             Log.Message("[R4] Building ThingDef cache...");
@@ -57,6 +50,15 @@ namespace RRRR
             Log.Message($"[R4] CompProperties_Recyclable found on {compCount} ThingDefs.");
 
             Log.Message("[R4] === R4 Startup Complete ===");
+        }
+
+        private static void VerifyDef<T>(string defName) where T : Def
+        {
+            var def = DefDatabase<T>.GetNamedSilentFail(defName);
+            if (def != null)
+                Log.Message($"[R4] {typeof(T).Name} '{defName}' loaded OK.");
+            else
+                Log.Error($"[R4] {typeof(T).Name} '{defName}' NOT FOUND!");
         }
     }
 }
