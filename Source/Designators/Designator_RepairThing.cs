@@ -6,12 +6,13 @@ namespace RRRR
 {
     /// <summary>
     /// Map-order designator for repairing damaged items.
-    /// Only accepts items below max HP. Supports drag-select.
-    /// Can coexist with R4_Clean designation but not R4_Recycle.
+    /// Supports click and drag-to-designate. Can coexist with R4_Clean.
     /// </summary>
     public class Designator_RepairThing : Designator
     {
         protected override DesignationDef Designation => R4DefOf.R4_Repair;
+
+        public override DrawStyleCategoryDef DrawStyleCategory => DrawStyleCategoryDefOf.FilledRectangle;
 
         public Designator_RepairThing()
         {
@@ -32,7 +33,6 @@ namespace RRRR
         {
             if (!c.InBounds(base.Map) || c.Fogged(base.Map))
                 return false;
-
             var things = c.GetThingList(base.Map);
             for (int i = 0; i < things.Count; i++)
             {
@@ -62,11 +62,8 @@ namespace RRRR
                 return "R4_NotDamaged".Translate();
             if (base.Map.designationManager.DesignationOn(t, Designation) != null)
                 return "R4_AlreadyDesignatedRepair".Translate();
-            // Recycle conflicts with repair
             if (base.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) != null)
                 return "R4_AlreadyDesignatedRecycle".Translate();
-            // Clean is allowed alongside repair — they address different problems
-
             return true;
         }
 

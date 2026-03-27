@@ -6,8 +6,13 @@ using Verse.AI;
 namespace RRRR
 {
     /// <summary>
-    /// Scans for items designated R4_Repair, finds a nearby bench,
-    /// and creates a repair job. Uses Crafting work type.
+    /// Scans for items designated R4_Repair, finds a nearby bench and
+    /// the required materials, and creates a job with ingredients queued.
+    /// 
+    /// Job target layout (matches vanilla DoBill pattern):
+    ///   TargetA = workbench
+    ///   TargetQueueA[0] = item to repair (single-element queue)
+    ///   TargetQueueB = ingredient stacks, countQueue = amounts
     /// </summary>
     public class WorkGiver_R4Repair : WorkGiver_Scanner
     {
@@ -31,16 +36,21 @@ namespace RRRR
         {
             if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Repair) == null)
                 return false;
-
             if (!pawn.CanReserve(t, 1, -1, null, forced))
                 return false;
-
             if (t.IsForbidden(pawn))
                 return false;
 
             Thing bench = FindBench(pawn, t, forced);
             if (bench == null)
                 return false;
+
+            var cycleCost = MaterialUtility.GetRepairCycleCost(t);
+            if (cycleCost.Count > 0)
+            {
+                if (!MaterialUtility.TryFindIngredients(cycleCost, pawn, out _, out _))
+                    return false;
+            }
 
             return true;
         }
@@ -54,15 +64,33 @@ namespace RRRR
             if (bench == null)
                 return null;
 
-            Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, t, bench);
+            var cycleCost = MaterialUtility.GetRepairCycleCost(t);
+
+            // TargetA = bench (matches vanilla DoBill)
+            Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, bench);
             job.count = 1;
+
+            // Item stored in targetQueueA as single element
+            job.targetQueueA = new List<LocalTargetInfo> { t };
+
+            // Ingredients in targetQueueB
+            if (cycleCost.Count > 0)
+            {
+                if (!MaterialUtility.TryFindIngredients(cycleCost, pawn, out var foundThings, out var foundCounts))
+                    return null;
+
+                job.targetQueueB = new List<LocalTargetInfo>();
+                job.countQueue = new List<int>();
+                for (int i = 0; i < foundThings.Count; i++)
+                {
+                    job.targetQueueB.Add(foundThings[i]);
+                    job.countQueue.Add(foundCounts[i]);
+                }
+            }
+
             return job;
         }
 
-        /// <summary>
-        /// Reuses the same bench-finding logic as recycle.
-        /// Repair uses the same workbenches.
-        /// </summary>
         private Thing FindBench(Pawn pawn, Thing item, bool forced)
         {
             var validBenchDefs = WorkbenchRouter.GetValidBenches(item);
@@ -76,27 +104,20 @@ namespace RRRR
                 if (benchesOfType != null)
                     candidates.AddRange(benchesOfType);
             }
-
             if (candidates.Count == 0)
                 return null;
 
             TraverseParms traverseParms = TraverseParms.For(pawn, pawn.NormalMaxDanger(), TraverseMode.ByPawn);
 
             return GenClosest.ClosestThingReachable(
-                pawn.Position,
-                pawn.Map,
+                pawn.Position, pawn.Map,
                 ThingRequest.ForGroup(ThingRequestGroup.Undefined),
-                PathEndMode.InteractionCell,
-                traverseParms,
-                9999f,
+                PathEndMode.InteractionCell, traverseParms, 9999f,
                 delegate (Thing bench)
                 {
-                    if (bench.IsForbidden(pawn))
-                        return false;
-                    if (!pawn.CanReserve(bench, 1, -1, null, forced))
-                        return false;
-                    if (bench is IBillGiver billGiver && !billGiver.UsableForBillsAfterFueling())
-                        return false;
+                    if (bench.IsForbidden(pawn)) return false;
+                    if (!pawn.CanReserve(bench, 1, -1, null, forced)) return false;
+                    if (bench is IBillGiver bg && !bg.UsableForBillsAfterFueling()) return false;
                     return true;
                 },
                 candidates);

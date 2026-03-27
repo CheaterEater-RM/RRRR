@@ -1,65 +1,48 @@
 # R⁴ — Milestones
 
-## M0: Skeleton & XML Stability ✅
+## M0–M3: Core Features ✅
 
-**Goal:** Prove the mod loads without crashing. No gameplay.
-
----
-
-## M1: Recycle — Full Loop ✅
-
-**Goal:** Player designates item → pawn hauls to bench → works → materials spawn → item destroyed.
+Recycle, Repair, Clean all functional with designator-based workflow.
 
 ---
 
-## M2: Repair ✅
+## Material Cost & Ingredient Gathering Rework ✅
 
-**Goal:** Multi-cycle repair with skill checks, failure mechanics, material consumption.
+**Problems fixed:**
+1. Drag-select didn't work — designators lacked `DrawStyleCategory` override
+2. Materials consumed remotely from map without pawns physically hauling them
+3. Repair infinite loop when materials unavailable — pawn kept retrying with no materials
+4. Revolver worked without materials because steel was consumed from elsewhere on map
 
----
+**Solution: Vanilla-compatible ingredient queue pattern:**
+- WorkGiver calculates cost, finds material stacks, populates `job.targetQueueB` + `job.countQueue`
+- JobDriver Phase 1: extract from queue → goto → carry → place on bench → loop
+- JobDriver Phase 2: haul item to bench
+- JobDriver Phase 3: work
+- JobDriver Phase 4: consume ingredients from bench cells, apply result
+- If materials unavailable, WorkGiver simply doesn't create the job (no infinite loop)
 
-## M3: Clean (Taint Removal) ✅
+**Repair:** One cycle per job. Each cycle gathers materials → works → skill check. If item still damaged, designation stays and WorkGiver creates a new job with fresh ingredients for the next cycle.
 
-**Goal:** Remove corpse taint from apparel at a workbench, consuming materials.
+**Clean:** All materials gathered upfront → work → consume → remove taint.
 
----
+**Drag-select fix:** Added `DrawStyleCategoryDef DrawStyleCategory => DrawStyleCategoryDefOf.FilledRectangle` to all three designators. This enables the vanilla drag-rectangle rendering.
 
-## Material Cost System (cross-cutting, added after M3)
+**Material costs (deterministic, ceiling-rounded):**
+- Repair cycle: 10% of base materials × 1.2 × techDifficulty per cycle. Components at 50% rate.
+- Clean: 20% of base materials (non-intricate). Minimum 1 of primary material.
 
-**Goal:** Repair and cleaning consume materials from the map. Prevent clean→recycle from being more profitable than direct recycling.
-
-**Completed:**
-- [x] `MaterialUtility.GetRepairCycleCost(item)` — 10% of base materials per cycle × 1.2 × techDifficulty. Components at 50% reduced rate, probabilistically rounded.
-- [x] `MaterialUtility.GetCleanCost(item)` — 20% of base materials (non-intricate only). Minimum 1 of primary material.
-- [x] `MaterialUtility.HasRepairMaterials()` / `ConsumeRepairMaterials()` — check and consume materials from map, sorted by distance
-- [x] `JobDriver_R4Repair` — consumes materials at end of each cycle. Aborts with message if materials unavailable.
-- [x] `JobDriver_R4Clean` — consumes materials upfront before starting work. Aborts if unavailable.
-- [x] Translation keys for material shortage messages
-
-**Designation coexistence fix:**
-- [x] Repair + Clean can coexist on the same item (they address different problems)
-- [x] Repair only removes R4_Repair designation on completion (was using `RemoveAllDesignationsOn` which wiped R4_Clean)
-- [x] Clean only removes R4_Clean designation on completion
-- [x] Recycle still conflicts with both repair and clean (checked in all three designators)
-
-**Economics verification:**
-- Tainted recycle: returns ~25% of materials (50% base × 50% taint penalty), no cost
-- Clean then recycle: costs 20% of materials, then returns ~50% (no taint penalty). Net = 30% return. Slightly better than tainted recycle but requires materials upfront and two jobs — fair trade.
-- Repair: costs ~12% of materials per cycle (10% × 1.2), restores 10% HP per success. Over a full 0→100% repair, costs ~120% of base materials (more than crafting a new one at low tech, less at high tech due to the 1.2× multiplier being offset by higher tech difficulty). Encourages repairing lightly damaged items rather than rebuilding from scratch.
-
-**Validation:**
-- [ ] Repair consumes materials each cycle — check logs / material stacks
-- [ ] Repair aborts with message when materials unavailable
-- [ ] Clean consumes materials upfront
-- [ ] Clean aborts with message when materials unavailable
-- [ ] Repair + clean dual designation works: repair finishes, clean designation survives
-- [ ] Clean→recycle pipeline returns less net material than clean cost
+**Files changed:**
+- `MaterialUtility.cs` — added `TryFindIngredients()`, `ConsumeIngredientsOnBench()`, switched to ceiling rounding
+- `WorkGiver_R4Repair.cs` — finds ingredients, populates job queues
+- `WorkGiver_R4Clean.cs` — finds ingredients, populates job queues
+- `JobDriver_R4Repair.cs` — full rewrite with ingredient hauling phase
+- `JobDriver_R4Clean.cs` — full rewrite with ingredient hauling phase
+- All three `Designator_*.cs` — added `DrawStyleCategory` override
 
 ---
 
 ## M4: Bill-Based Automation
-
-**Goal:** Standing bills at workbenches with filters for automated batch processing.
 
 - [ ] `SpecialThingFilterDef` entries (**all must have `<parentCategory>`!**)
 - [ ] `RecipeDef` entries for bill-based recycle/repair/clean
@@ -80,19 +63,16 @@
 
 ## Lessons Learned
 
-**XML safety:**
-1. Never use `PatchOperationSequence`/`PatchOperationConditional` for comp injection
-2. Every `SpecialThingFilterDef` **must** have `<parentCategory>`
-3. Target `thingClass` (stable) not `thingCategories` (fragile)
+**XML safety:** No Sequence/Conditional for comp injection. Every SpecialThingFilterDef needs parentCategory.
 
-**Work speed:** 15% of WorkToMake (clamped). `GeneralLaborSpeed` not `WorkSpeedGlobal`.
+**Designator drag-select:** Must override `DrawStyleCategory => DrawStyleCategoryDefOf.FilledRectangle`. Without this, the drag rectangle doesn't render and multi-cell designation doesn't work properly.
 
-**Quality:** `CompQuality.SetQuality()` is public — no reflection needed.
+**Ingredient gathering:** Never consume materials remotely from the map. Use the vanilla queue pattern: WorkGiver finds stacks → populates `targetQueueB`/`countQueue` → JobDriver hauls to bench surface → consumes from `IngredientStackCells` after work. This is how `JobDriver_DoBill` handles it.
 
-**Workbench routing:** `def.recipeMaker?.recipeUsers` for per-item routing. Fallback to smeltable scan.
+**Material costs should be deterministic:** Use `Mathf.CeilToInt` not `GenMath.RoundRandom` for costs. Players need to know exactly what's required. Probabilistic rounding is fine for returns (recycle products) but not for costs.
 
-**Repair designation:** Only remove the specific R4_Repair designation on completion — not `RemoveAllDesignationsOn` which wipes coexisting designations like R4_Clean.
+**One cycle per job for repair:** Rather than multi-cycle within a single job, do one cycle per job attempt. The WorkGiver gathers fresh materials each time. This is simpler, avoids mid-job material shortages, and naturally handles interruptions — the designation persists until full HP.
 
-**Material consumption:** Repair consumes per-cycle, clean consumes upfront. Both abort gracefully with a player message if materials are unavailable. Materials are found via `map.listerThings.ThingsOfDef()` sorted by distance.
+**Designation specificity:** Use `RemoveDesignation(specific)` not `RemoveAllDesignationsOn` — repair and clean can coexist on the same item.
 
-**HP calculations in failure handlers:** Use `cyclesCompleted / totalCyclesNeeded` for progress. Capture labels before destruction. Guard division by MaxHitPoints.
+**Workbench routing:** `def.recipeMaker?.recipeUsers` for per-item routing. Revolver→machining, sword→smithy, jacket→tailor.

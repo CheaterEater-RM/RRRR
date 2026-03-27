@@ -6,12 +6,13 @@ namespace RRRR
 {
     /// <summary>
     /// Map-order designator for cleaning taint from apparel.
-    /// Only accepts tainted apparel. Supports drag-select.
-    /// Can coexist with R4_Repair designation but not R4_Recycle.
+    /// Supports click and drag-to-designate. Can coexist with R4_Repair.
     /// </summary>
     public class Designator_CleanThing : Designator
     {
         protected override DesignationDef Designation => R4DefOf.R4_Clean;
+
+        public override DrawStyleCategoryDef DrawStyleCategory => DrawStyleCategoryDefOf.FilledRectangle;
 
         public Designator_CleanThing()
         {
@@ -32,7 +33,6 @@ namespace RRRR
         {
             if (!c.InBounds(base.Map) || c.Fogged(base.Map))
                 return false;
-
             var things = c.GetThingList(base.Map);
             for (int i = 0; i < things.Count; i++)
             {
@@ -62,11 +62,8 @@ namespace RRRR
                 return "R4_NotTainted".Translate();
             if (base.Map.designationManager.DesignationOn(t, Designation) != null)
                 return "R4_AlreadyDesignatedClean".Translate();
-            // Recycle conflicts with clean
             if (base.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) != null)
                 return "R4_AlreadyDesignatedRecycle".Translate();
-            // Repair is allowed alongside clean — they address different problems
-
             return true;
         }
 
