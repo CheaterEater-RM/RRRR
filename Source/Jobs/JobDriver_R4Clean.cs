@@ -7,8 +7,9 @@ using Verse.AI;
 namespace RRRR
 {
     /// <summary>
-    /// Clean job: haul tainted apparel to workbench → work → remove taint.
+    /// Clean job: haul tainted apparel to workbench → work → consume materials → remove taint.
     /// Always succeeds. Skill reduces work time. No failure mechanics.
+    /// Material cost: ~20% of base materials (non-intricate only).
     /// 
     /// TargetA = apparel to clean, TargetB = workbench.
     /// </summary>
@@ -45,17 +46,13 @@ namespace RRRR
             this.FailOnDestroyedNullOrForbidden(BenchInd);
             this.FailOnThingMissingDesignation(ItemInd, R4DefOf.R4_Clean);
 
-            // 1. Go to item
             yield return Toils_Goto.GotoThing(ItemInd, PathEndMode.ClosestTouch)
                 .FailOnSomeonePhysicallyInteracting(ItemInd);
 
-            // 2. Pick up
             yield return Toils_Haul.StartCarryThing(ItemInd);
 
-            // 3. Carry to bench
             yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
 
-            // 4. Drop near bench
             Toil dropToil = ToilMaker.MakeToil("R4_Clean_Drop");
             dropToil.defaultCompleteMode = ToilCompleteMode.Instant;
             dropToil.initAction = delegate
@@ -65,7 +62,35 @@ namespace RRRR
             };
             yield return dropToil;
 
-            // 5. Work toil — flat work amount, skill reduces time
+            // Check and consume materials upfront before starting work
+            Toil materialCheckToil = ToilMaker.MakeToil("R4_Clean_MaterialCheck");
+            materialCheckToil.defaultCompleteMode = ToilCompleteMode.Instant;
+            materialCheckToil.initAction = delegate
+            {
+                Thing item = Item;
+                if (item == null)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+
+                var cleanCost = MaterialUtility.GetCleanCost(item);
+                if (cleanCost.Count > 0)
+                {
+                    if (!MaterialUtility.HasRepairMaterials(cleanCost, pawn.Map, pawn.Position))
+                    {
+                        Messages.Message(
+                            "R4_CleanNoMaterials".Translate(item.LabelCap),
+                            item, MessageTypeDefOf.RejectInput);
+                        EndJobWith(JobCondition.Incompletable);
+                        return;
+                    }
+                    MaterialUtility.ConsumeRepairMaterials(cleanCost, pawn.Map, pawn.Position);
+                }
+            };
+            yield return materialCheckToil;
+
+            // Work toil
             Toil workToil = ToilMaker.MakeToil("R4_Clean_Work");
             workToil.defaultCompleteMode = ToilCompleteMode.Never;
             workToil.handlingFacing = true;
@@ -81,14 +106,12 @@ namespace RRRR
                     return;
                 }
 
-                // Flat work: 15% of original crafting time, clamped
                 float workToMake = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
                 if (workToMake <= 0f)
                     workToMake = 1000f;
 
                 totalWork = Mathf.Clamp(workToMake * 0.15f, 300f, 1500f);
 
-                // On fresh start, set workLeft. On save-load, already restored.
                 if (workLeft <= 0f)
                     workLeft = totalWork;
             };
@@ -99,14 +122,10 @@ namespace RRRR
 
                 float pawnSpeed = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
                 float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
-
-                // Skill bonus: higher crafting skill = faster cleaning
                 int skillLevel = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-                float skillBonus = 1f + (skillLevel * 0.03f); // skill 10 = 1.3x, skill 20 = 1.6x
+                float skillBonus = 1f + (skillLevel * 0.03f);
 
-                float workDone = pawnSpeed * benchFactor * skillBonus;
-                workLeft -= workDone;
-
+                workLeft -= pawnSpeed * benchFactor * skillBonus;
                 pawn.skills?.Learn(SkillDefOf.Crafting, 0.08f);
 
                 if (workLeft <= 0f)
@@ -121,7 +140,7 @@ namespace RRRR
 
             yield return workToil;
 
-            // 6. Completion: remove taint, remove designation
+            // Completion: remove taint
             Toil finishToil = ToilMaker.MakeToil("R4_Clean_Finish");
             finishToil.defaultCompleteMode = ToilCompleteMode.Instant;
             finishToil.initAction = delegate
@@ -132,17 +151,15 @@ namespace RRRR
 
                 if (item is Apparel apparel)
                 {
-                    // Remove taint — public setter in RimWorld 1.6
                     apparel.WornByCorpse = false;
-
-                    // Force render update so the corpse tint is removed visually
                     apparel.Notify_ColorChanged();
-
                     Log.Message($"[R4] Cleaned taint from: {apparel.LabelCap}");
                 }
 
-                // Remove designation
-                pawn.Map.designationManager.RemoveAllDesignationsOn(item);
+                // Remove only the clean designation
+                var des = pawn.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean);
+                if (des != null)
+                    pawn.Map.designationManager.RemoveDesignation(des);
             };
 
             yield return finishToil;

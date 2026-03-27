@@ -8,7 +8,7 @@
 
   <!-- Repair designator -->
   <R4_RepairLabel>Repair</R4_RepairLabel>
-  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, with success depending on skill and tech level.</R4_RepairDesc>
+  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Success depends on skill and tech level.</R4_RepairDesc>
   <R4_MustDesignateRepairable>Must designate a damaged weapon or apparel.</R4_MustDesignateRepairable>
   <R4_NotDamaged>Item is not damaged.</R4_NotDamaged>
   <R4_AlreadyDesignatedRepair>Already designated for repair.</R4_AlreadyDesignatedRepair>
@@ -17,13 +17,15 @@
   <R4_RepairMinorFailure>{0} fumbled while repairing {1}. Minor damage.</R4_RepairMinorFailure>
   <R4_RepairCriticalFailure>{0} badly botched repairing {1}! Quality degraded.</R4_RepairCriticalFailure>
   <R4_RepairItemDestroyed>{0} was destroyed during a failed repair attempt.</R4_RepairItemDestroyed>
+  <R4_RepairNoMaterials>Not enough materials to continue repairing {0}.</R4_RepairNoMaterials>
 
   <!-- Clean designator -->
   <R4_CleanLabel>Clean taint</R4_CleanLabel>
-  <R4_CleanDesc>Designate tainted apparel for cleaning. A colonist will remove the corpse taint at a workbench.</R4_CleanDesc>
+  <R4_CleanDesc>Designate tainted apparel for cleaning. A colonist will remove the corpse taint at a workbench, consuming some materials.</R4_CleanDesc>
   <R4_MustDesignateTainted>Must designate tainted apparel.</R4_MustDesignateTainted>
   <R4_NotTainted>Apparel is not tainted.</R4_NotTainted>
   <R4_AlreadyDesignatedClean>Already designated for cleaning.</R4_AlreadyDesignatedClean>
+  <R4_CleanNoMaterials>Not enough materials to clean {0}.</R4_CleanNoMaterials>
 
   <!-- Settings UI -->
   <R4_Settings_RecycleHeader>Recycle Settings</R4_Settings_RecycleHeader>

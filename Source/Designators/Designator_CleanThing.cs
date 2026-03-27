@@ -6,7 +6,8 @@ namespace RRRR
 {
     /// <summary>
     /// Map-order designator for cleaning taint from apparel.
-    /// Only accepts tainted apparel (WornByCorpse). Supports drag-select.
+    /// Only accepts tainted apparel. Supports drag-select.
+    /// Can coexist with R4_Repair designation but not R4_Recycle.
     /// </summary>
     public class Designator_CleanThing : Designator
     {
@@ -18,9 +19,7 @@ namespace RRRR
             defaultDesc = "R4_CleanDesc".Translate();
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4CleanDesignation", reportFailure: false);
             if (icon == null)
-            {
                 icon = ContentFinder<Texture2D>.Get("UI/Designators/Unforbid", reportFailure: true);
-            }
             soundDragSustain = SoundDefOf.Designate_DragStandard;
             soundDragChanged = SoundDefOf.Designate_DragStandard_Changed;
             soundSucceeded = SoundDefOf.Designate_Haul;
@@ -40,7 +39,6 @@ namespace RRRR
                 if (CanDesignateThing(things[i]).Accepted)
                     return true;
             }
-
             return "R4_MustDesignateTainted".Translate();
         }
 
@@ -58,21 +56,16 @@ namespace RRRR
         {
             if (t.def == null || t.Map == null)
                 return false;
-
-            // Must be tainted apparel
             if (!(t is Apparel apparel))
                 return false;
-
             if (!apparel.WornByCorpse)
                 return "R4_NotTainted".Translate();
-
-            // Not already designated for cleaning
             if (base.Map.designationManager.DesignationOn(t, Designation) != null)
                 return "R4_AlreadyDesignatedClean".Translate();
-
-            // Not designated for recycle (conflicting)
+            // Recycle conflicts with clean
             if (base.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) != null)
                 return "R4_AlreadyDesignatedRecycle".Translate();
+            // Repair is allowed alongside clean — they address different problems
 
             return true;
         }

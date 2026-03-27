@@ -8,26 +8,23 @@ namespace RRRR
 {
     /// <summary>
     /// Repair job: haul item to workbench → work in cycles → each cycle restores
-    /// 10% maxHP with a skill check. Failures cause HP loss or quality degradation.
-    /// If the item reaches 0 HP, it is destroyed and partial materials are reclaimed.
+    /// 10% maxHP with a skill check, consuming materials proportional to the repair.
+    /// Failures cause HP loss or quality degradation. If item reaches 0 HP, it is
+    /// destroyed with partial material reclaim.
     /// 
     /// TargetA = item to repair, TargetB = workbench.
     /// 
-    /// Designation persistence: the R4_Repair designation stays on the item until
-    /// it reaches full HP or is destroyed. If the pawn gets interrupted or all planned
-    /// cycles finish but the item still has damage (from failures), the designation
-    /// remains so another pawn (or the same pawn) will continue the repair.
+    /// Designation persistence: the R4_Repair designation stays until full HP or
+    /// destruction. Only the R4_Repair designation is removed — other designations
+    /// (like R4_Clean) are preserved.
     /// </summary>
     public class JobDriver_R4Repair : JobDriver
     {
         private const TargetIndex ItemInd = TargetIndex.A;
         private const TargetIndex BenchInd = TargetIndex.B;
 
-        // Work tracking for the current cycle
         private float cycleWorkLeft;
         private float cycleWorkTotal;
-
-        // Overall repair tracking
         private int cyclesCompleted;
         private int totalCyclesNeeded;
 
@@ -58,17 +55,13 @@ namespace RRRR
             this.FailOnDestroyedNullOrForbidden(BenchInd);
             this.FailOnThingMissingDesignation(ItemInd, R4DefOf.R4_Repair);
 
-            // 1. Go to item
             yield return Toils_Goto.GotoThing(ItemInd, PathEndMode.ClosestTouch)
                 .FailOnSomeonePhysicallyInteracting(ItemInd);
 
-            // 2. Pick up item
             yield return Toils_Haul.StartCarryThing(ItemInd);
 
-            // 3. Carry to bench
             yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
 
-            // 4. Drop item near bench
             Toil dropToil = ToilMaker.MakeToil("R4_Repair_Drop");
             dropToil.defaultCompleteMode = ToilCompleteMode.Instant;
             dropToil.initAction = delegate
@@ -78,7 +71,7 @@ namespace RRRR
             };
             yield return dropToil;
 
-            // 5. Initialize repair tracking
+            // Initialize
             Toil initToil = ToilMaker.MakeToil("R4_Repair_Init");
             initToil.defaultCompleteMode = ToilCompleteMode.Instant;
             initToil.initAction = delegate
@@ -92,8 +85,7 @@ namespace RRRR
 
                 if (item.HitPoints >= item.MaxHitPoints)
                 {
-                    // Already at full HP — remove designation and finish
-                    pawn.Map.designationManager.RemoveAllDesignationsOn(item);
+                    RemoveRepairDesignation(item);
                     EndJobWith(JobCondition.Succeeded);
                     return;
                 }
@@ -104,7 +96,7 @@ namespace RRRR
             };
             yield return initToil;
 
-            // 6. Repair work toil — cycles through work, applying skill checks per cycle
+            // Work toil
             Toil workToil = ToilMaker.MakeToil("R4_Repair_Work");
             workToil.defaultCompleteMode = ToilCompleteMode.Never;
             workToil.handlingFacing = true;
@@ -136,30 +128,41 @@ namespace RRRR
 
                 if (cycleWorkLeft <= 0f)
                 {
+                    // Consume materials for this cycle
+                    var cycleCost = MaterialUtility.GetRepairCycleCost(item);
+                    if (cycleCost.Count > 0)
+                    {
+                        if (!MaterialUtility.HasRepairMaterials(cycleCost, pawn.Map, pawn.Position))
+                        {
+                            Messages.Message(
+                                "R4_RepairNoMaterials".Translate(item.LabelCap),
+                                item, MessageTypeDefOf.RejectInput);
+                            // End job but keep designation — materials may appear later
+                            ReadyForNextToil();
+                            return;
+                        }
+                        MaterialUtility.ConsumeRepairMaterials(cycleCost, pawn.Map, pawn.Position);
+                    }
+
                     CompleteCycle(item);
 
-                    // Check if item was destroyed by failure
                     if (item.Destroyed || item.HitPoints <= 0)
                     {
                         HandleItemDestroyed(item);
                         return;
                     }
 
-                    // Check if fully repaired — only NOW remove designation
                     if (item.HitPoints >= item.MaxHitPoints)
                     {
-                        Log.Message($"[R4] Repair complete: {item.LabelCap} fully repaired after {cyclesCompleted} cycles.");
-                        pawn.Map.designationManager.RemoveAllDesignationsOn(item);
+                        Log.Message($"[R4] Repair complete: {item.LabelCap} after {cyclesCompleted} cycles.");
+                        RemoveRepairDesignation(item);
                         ReadyForNextToil();
                         return;
                     }
 
-                    // All planned cycles done but item still damaged (failures reduced HP).
-                    // End this job attempt but KEEP the designation — another pawn
-                    // (or this pawn) will pick it up again via WorkGiver.
                     if (cyclesCompleted >= totalCyclesNeeded)
                     {
-                        Log.Message($"[R4] Repair pass done: {item.LabelCap} at {item.HitPoints}/{item.MaxHitPoints} HP after {cyclesCompleted} cycles. Designation remains for continued repair.");
+                        Log.Message($"[R4] Repair pass done: {item.LabelCap} at {item.HitPoints}/{item.MaxHitPoints} HP. Designation remains.");
                         ReadyForNextToil();
                         return;
                     }
@@ -177,10 +180,20 @@ namespace RRRR
 
             yield return workToil;
 
-            // 7. Finish toil
             Toil finishToil = ToilMaker.MakeToil("R4_Repair_Finish");
             finishToil.defaultCompleteMode = ToilCompleteMode.Instant;
             yield return finishToil;
+        }
+
+        /// <summary>
+        /// Remove only the R4_Repair designation, preserving other designations
+        /// (like R4_Clean) on the same item.
+        /// </summary>
+        private void RemoveRepairDesignation(Thing item)
+        {
+            var des = pawn.Map.designationManager.DesignationOn(item, R4DefOf.R4_Repair);
+            if (des != null)
+                pawn.Map.designationManager.RemoveDesignation(des);
         }
 
         private void StartNewCycle()
@@ -231,7 +244,6 @@ namespace RRRR
             string itemLabel = item.LabelCap;
             Log.Message($"[R4] Repair failure destroyed: {itemLabel}");
 
-            // Reclaim partial materials scaled by cycle progress
             float progressRatio = (float)cyclesCompleted / Mathf.Max(totalCyclesNeeded, 1);
 
             if (!item.Destroyed)

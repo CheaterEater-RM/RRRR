@@ -14,41 +14,46 @@
 
 ## M2: Repair ✅
 
-**Goal:** Multi-cycle repair with skill checks, failure mechanics.
+**Goal:** Multi-cycle repair with skill checks, failure mechanics, material consumption.
 
 ---
 
 ## M3: Clean (Taint Removal) ✅
 
-**Goal:** Remove corpse taint from apparel at a workbench.
+**Goal:** Remove corpse taint from apparel at a workbench, consuming materials.
+
+---
+
+## Material Cost System (cross-cutting, added after M3)
+
+**Goal:** Repair and cleaning consume materials from the map. Prevent clean→recycle from being more profitable than direct recycling.
 
 **Completed:**
-- [x] `DesignationDef` for `R4_Clean` with placeholder texture
-- [x] `JobDef` for `RRRR_Clean`
-- [x] `WorkGiverDef` for clean (Crafting work type, priority 45)
-- [x] `Designator_CleanThing` — targets tainted apparel only, blocks if designated for recycle, drag-select
-- [x] `WorkGiver_R4Clean` — scans R4_Clean designations, finds bench via WorkbenchRouter
-- [x] `JobDriver_R4Clean` — haul → bench → work → remove taint
-  - Flat work: 15% of WorkToMake, clamped 300–1500
-  - Always succeeds — no failure mechanics
-  - Skill bonus: crafting skill speeds up work (skill 10 = 1.3x, skill 20 = 1.6x)
-  - `Apparel.WornByCorpse = false` (public setter)
-  - `Apparel.Notify_ColorChanged()` to update render
-  - `ExposeData` for `workLeft`/`totalWork` (save mid-job)
-  - Progress bar
-- [x] `R4DefOf` updated with `R4_Clean` and `RRRR_Clean`
-- [x] Orders menu, ReverseDesignatorDatabase updated with clean designator
-- [x] Translation keys for clean UI
-- [x] Setup.cs verifies clean defs at startup
-- [x] `generate_textures.py` updated with all three textures
+- [x] `MaterialUtility.GetRepairCycleCost(item)` — 10% of base materials per cycle × 1.2 × techDifficulty. Components at 50% reduced rate, probabilistically rounded.
+- [x] `MaterialUtility.GetCleanCost(item)` — 20% of base materials (non-intricate only). Minimum 1 of primary material.
+- [x] `MaterialUtility.HasRepairMaterials()` / `ConsumeRepairMaterials()` — check and consume materials from map, sorted by distance
+- [x] `JobDriver_R4Repair` — consumes materials at end of each cycle. Aborts with message if materials unavailable.
+- [x] `JobDriver_R4Clean` — consumes materials upfront before starting work. Aborts if unavailable.
+- [x] Translation keys for material shortage messages
 
-**Validation checklist:**
-- [ ] Designate tainted apparel → pawn hauls to bench and works
-- [ ] Verify taint removed after job completes (WornByCorpse = false)
-- [ ] Verify apparel color updates (no longer corpse-tinted)
-- [ ] Non-tainted apparel cannot be designated for cleaning
-- [ ] Clean and recycle designators don't conflict
-- [ ] Save/load mid-clean
+**Designation coexistence fix:**
+- [x] Repair + Clean can coexist on the same item (they address different problems)
+- [x] Repair only removes R4_Repair designation on completion (was using `RemoveAllDesignationsOn` which wiped R4_Clean)
+- [x] Clean only removes R4_Clean designation on completion
+- [x] Recycle still conflicts with both repair and clean (checked in all three designators)
+
+**Economics verification:**
+- Tainted recycle: returns ~25% of materials (50% base × 50% taint penalty), no cost
+- Clean then recycle: costs 20% of materials, then returns ~50% (no taint penalty). Net = 30% return. Slightly better than tainted recycle but requires materials upfront and two jobs — fair trade.
+- Repair: costs ~12% of materials per cycle (10% × 1.2), restores 10% HP per success. Over a full 0→100% repair, costs ~120% of base materials (more than crafting a new one at low tech, less at high tech due to the 1.2× multiplier being offset by higher tech difficulty). Encourages repairing lightly damaged items rather than rebuilding from scratch.
+
+**Validation:**
+- [ ] Repair consumes materials each cycle — check logs / material stacks
+- [ ] Repair aborts with message when materials unavailable
+- [ ] Clean consumes materials upfront
+- [ ] Clean aborts with message when materials unavailable
+- [ ] Repair + clean dual designation works: repair finishes, clean designation survives
+- [ ] Clean→recycle pipeline returns less net material than clean cost
 
 ---
 
@@ -80,14 +85,14 @@
 2. Every `SpecialThingFilterDef` **must** have `<parentCategory>`
 3. Target `thingClass` (stable) not `thingCategories` (fragile)
 
-**Weapons:** Vanilla weapons use `thingClass="ThingWithComps"` — can't XML-target. Designators check `def.IsWeapon` directly.
-
-**Work speed:** 15% of WorkToMake (clamped) for recycling/cleaning. `GeneralLaborSpeed` not `WorkSpeedGlobal`.
+**Work speed:** 15% of WorkToMake (clamped). `GeneralLaborSpeed` not `WorkSpeedGlobal`.
 
 **Quality:** `CompQuality.SetQuality()` is public — no reflection needed.
 
-**Workbench routing:** `def.recipeMaker?.recipeUsers` is the per-item crafting bench list — use as primary routing. Fallback to smeltable/non-smeltable for items without recipeMaker.
+**Workbench routing:** `def.recipeMaker?.recipeUsers` for per-item routing. Fallback to smeltable scan.
 
-**Repair designation persistence:** Only remove on full HP or destruction.
+**Repair designation:** Only remove the specific R4_Repair designation on completion — not `RemoveAllDesignationsOn` which wipes coexisting designations like R4_Clean.
 
-**HP calculations in failure handlers:** Use `cyclesCompleted / totalCyclesNeeded` for progress, not HP math. Capture labels before destruction. Guard division by MaxHitPoints.
+**Material consumption:** Repair consumes per-cycle, clean consumes upfront. Both abort gracefully with a player message if materials are unavailable. Materials are found via `map.listerThings.ThingsOfDef()` sorted by distance.
+
+**HP calculations in failure handlers:** Use `cyclesCompleted / totalCyclesNeeded` for progress. Capture labels before destruction. Guard division by MaxHitPoints.

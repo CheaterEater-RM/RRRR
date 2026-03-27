@@ -7,6 +7,7 @@ namespace RRRR
     /// <summary>
     /// Map-order designator for repairing damaged items.
     /// Only accepts items below max HP. Supports drag-select.
+    /// Can coexist with R4_Clean designation but not R4_Recycle.
     /// </summary>
     public class Designator_RepairThing : Designator
     {
@@ -18,9 +19,7 @@ namespace RRRR
             defaultDesc = "R4_RepairDesc".Translate();
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RepairDesignation", reportFailure: false);
             if (icon == null)
-            {
                 icon = ContentFinder<Texture2D>.Get("UI/Designators/Claim", reportFailure: true);
-            }
             soundDragSustain = SoundDefOf.Designate_DragStandard;
             soundDragChanged = SoundDefOf.Designate_DragStandard_Changed;
             soundSucceeded = SoundDefOf.Designate_Haul;
@@ -40,7 +39,6 @@ namespace RRRR
                 if (CanDesignateThing(things[i]).Accepted)
                     return true;
             }
-
             return "R4_MustDesignateRepairable".Translate();
         }
 
@@ -58,21 +56,16 @@ namespace RRRR
         {
             if (t.def == null || t.Map == null)
                 return false;
-
             if (!t.def.IsWeapon && !t.def.IsApparel)
                 return false;
-
-            // Must be damaged
             if (!t.def.useHitPoints || t.HitPoints >= t.MaxHitPoints)
                 return "R4_NotDamaged".Translate();
-
-            // Not already designated for repair
             if (base.Map.designationManager.DesignationOn(t, Designation) != null)
                 return "R4_AlreadyDesignatedRepair".Translate();
-
-            // Not designated for recycle (conflicting)
+            // Recycle conflicts with repair
             if (base.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) != null)
                 return "R4_AlreadyDesignatedRecycle".Translate();
+            // Clean is allowed alongside repair — they address different problems
 
             return true;
         }
