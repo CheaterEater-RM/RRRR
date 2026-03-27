@@ -27,12 +27,12 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `WorkGiver_R4Recycle` | Scans for designated items, creates recycle jobs (Crafting work type) |
 | `WorkGiver_R4Repair` | Scans for items needing repair near benches, creates repair jobs |
 | `JobDriver_R4Recycle` | Haul item to bench → work → spawn materials → destroy item |
-| `JobDriver_R4Repair` | Multi-cycle repair with skill checks (M2) |
+| `JobDriver_R4Repair` | Multi-cycle repair with skill checks |
 | `JobDriver_R4Clean` | Taint removal (M3) |
 | `MaterialUtility` | All material/cost calculations |
-| `WorkbenchRouter` | Maps item type → valid workbench(es) using recipe presence, not hardcoded defNames |
-| `SkillUtility` | Skill factor, repair success checks, failure severity |
-| `R4ThingDefCache` | `[StaticConstructorOnStartup]` cache of bench lists, built once at load |
+| `WorkbenchRouter` | Maps item → valid workbench(es) via `recipeMaker.recipeUsers` |
+| `SkillUtility` | Tech difficulty, repair success checks, failure severity |
+| `R4ThingDefCache` | `[StaticConstructorOnStartup]` cache of fallback bench lists |
 
 ### Harmony Patches (1 total)
 
@@ -40,78 +40,38 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 |---|---|---|
 | `ReverseDesignatorDatabase.InitDesignators` | Postfix | Inject gizmo designators so they appear on selected items |
 
-> **Removed:** The original design listed `ThingDef.ResolveReferences` as a fallback comp injection patch. XML `<comps>` injection via `PatchOperationAdd` (targeting apparel/weapon base ThingDefs) is the correct and sufficient approach. A Harmony patch on `ResolveReferences` is fragile and unnecessary.
-
 ### Designation Flow
 
-**Designator (map-order):** Player clicks map-order designator or drag-selects → places `DesignationDef` on items → `WorkGiver_R4Recycle` scans `designationManager.SpawnedDesignationsOfDef(...)` in `PotentialWorkThingsGlobal` → pawn hauls to bench and works. `DesignateSingleCell` designates ALL matching items per cell for proper drag-select support.
+**Designator (map-order):** Player clicks map-order designator or drag-selects → places `DesignationDef` on items → WorkGiver scans `designationManager.SpawnedDesignationsOfDef(...)` → pawn hauls to bench and works. `DesignateSingleCell` designates ALL matching items per cell for drag-select.
 
-**Gizmo (direct select):** Select item → click gizmo on `CompRecyclable` → gizmo places designation → same WorkGiver flow handles it from there. Gizmos are added via `ReverseDesignatorDatabase.InitDesignators` postfix so they appear in the "select item" right-click context.
+**Designation persistence (repair):** The R4_Repair designation stays on the item until it reaches full HP or is destroyed. If the pawn is interrupted or the planned cycles finish but the item still has damage from failures, the designation remains so another job picks it up.
 
-**Bills (automated, M4):** Standing bills at workbenches with custom `SpecialThingFilterWorker`s and `RecipeWorker` subclasses — deferred to milestone 4.
+**Gizmo (direct select):** Select item → click gizmo → gizmo places designation → same WorkGiver flow. Gizmos injected via `ReverseDesignatorDatabase.InitDesignators` postfix.
+
+**Bills (automated, M4):** Standing bills with custom `SpecialThingFilterWorker`s — deferred.
 
 ### Workbench Routing
 
-Routing is determined by inspecting `ThingDef.AllRecipes` at startup (in `R4ThingDefCache`), not by hardcoded defName lists. This gives automatic compatibility with modded benches.
+**Primary strategy:** Each item's `recipeMaker.recipeUsers` lists the benches where it was originally crafted. R4 routes the item to those same benches for recycling/repair. This means a revolver goes to the machining table, a longsword to the smithy, and a jacket to the tailor bench — automatically correct for vanilla and modded items.
 
-| Item Type | Criterion | Typical Result |
-|---|---|---|
-| Smeltable items | `thing.Smeltable` | Benches with `SmeltWeapon` or `SmeltApparel` recipe |
-| Textile/leather apparel | Non-smeltable apparel | Benches with `Make_Apparel_BasicShirt` or `Make_Apparel_TribalA` recipe |
-| Fallback | All else | Try smelt benches, then apparel benches |
+**Fallback** (for items without `recipeMaker`, e.g. quest rewards, trader goods, loot): Route by `Smeltable` → smelt benches, or `IsApparel` → apparel crafting benches, or last resort → any available bench from the cache.
+
+`R4ThingDefCache` builds the fallback bench lists at startup by scanning `DefDatabase<ThingDef>` for benches with `SmeltWeapon`/`SmeltApparel` or `Make_Apparel_BasicShirt` recipes.
 
 ## XML Integration
 
 ### Comp Injection: thingClass Limitation
 
-**Critical finding:** Vanilla weapons (guns, melee) use `thingClass="ThingWithComps"`, which is shared by hundreds of unrelated defs. This means XML comp injection via `thingClass` cannot safely target weapons — only apparel (`thingClass="Apparel"`).
-
-**Current approach:** XML injects `CompProperties_Recyclable` on apparel only. The designator works on both weapons and apparel because it checks `def.IsWeapon || def.IsApparel` directly, without requiring the comp. The comp is only needed for gizmos (M2+), at which point weapon comp injection will be handled in C# at startup after Defs load.
+Vanilla weapons use `thingClass="ThingWithComps"`, shared by hundreds of unrelated defs. XML comp injection targets apparel only (`thingClass="Apparel"`). The designator checks `def.IsWeapon || def.IsApparel` directly without requiring the comp.
 
 ### The Safe Two-Step Comp Injection Pattern
 
-Two flat, unconditional operations: first ensure `<comps>` exists, then inject the comp. No `PatchOperationSequence`, no `PatchOperationConditional`, no `PatchOperationTest`.
+Two flat `PatchOperationAdd` operations: ensure `<comps>` exists, then inject the comp. No Sequence/Conditional/Test.
 
-```xml
-<Patch>
-  <Operation Class="PatchOperationAdd">
-    <xpath>Defs/ThingDef[thingClass="Apparel" and not(comps)]</xpath>
-    <value>
-      <comps/>
-    </value>
-  </Operation>
+### The Startup Crash: Root Causes (historical)
 
-  <Operation Class="PatchOperationAdd">
-    <xpath>Defs/ThingDef[thingClass="Apparel" and not(comps/li[@Class="RRRR.CompProperties_Recyclable"])]/comps</xpath>
-    <value>
-      <li Class="RRRR.CompProperties_Recyclable"/>
-    </value>
-  </Operation>
-</Patch>
-```
-
-Each operation is atomic. If Step 1 finds no matching defs, it silently does nothing. If Step 2 finds a def that already has the comp, it skips it. Neither can corrupt the Def database.
-
-### The Startup Crash: What Actually Happens
-
-The observed crash pattern (confirmed by Player.log) is:
-
-```
-System.NullReferenceException at Verse.ThingCategoryNodeDatabase.FinalizeInit()
-```
-
-Followed by hundreds of missing texture errors for vanilla assets. **The textures are not the problem.** The NullReferenceException corrupts the Def database during loading. Two root causes were identified:
-
-1. `PatchOperationSequence`/`PatchOperationConditional` chains for comp injection → half-applied patches on defs without `<comps>` nodes
-2. `SpecialThingFilterDef` entries with null `parentCategory` → `ThingCategoryNodeDatabase.FinalizeInit()` unconditionally accesses `allDef3.parentCategory.childSpecialFilters` with no null check
-
-### Texture Paths for DesignationDefs
-
-`DesignationDef.texturePath` resolves from the mod's `Textures/` folder without the `Textures/` prefix. The PNG must exist at load time.
-
-### Injecting Designators into the Orders Menu
-
-`PatchOperationAdd` on `DesignationCategoryDef[defName="Orders"]/specialDesignatorClasses`. The `ReverseDesignatorDatabase.InitDesignators` Harmony postfix is also needed for gizmos on selected items. Both UI surfaces are required.
+1. `PatchOperationSequence`/`PatchOperationConditional` for comp injection → half-applied patches on defs without `<comps>` nodes
+2. `SpecialThingFilterDef` with null `parentCategory` → `ThingCategoryNodeDatabase.FinalizeInit()` NPE
 
 ## Formulas
 
@@ -119,67 +79,62 @@ Followed by hundreds of missing texture errors for vanilla assets. **The texture
 ```
 work = clamp(WorkToMake × 0.15, 400, 2000)
 ```
-- 15% of original crafting time, clamped for consistency
-- For reference: vanilla SmeltWeapon is a flat 1600
-- Work rate uses `GeneralLaborSpeed` stat × `WorkTableWorkSpeedFactor`
+Work rate uses `GeneralLaborSpeed` stat × `WorkTableWorkSpeedFactor`.
 
 ### Recycle Return
 ```
 return = baseCost × condition × quality × skill × taintPenalty × rarePenalty × globalMult
 ```
-- **Condition:** `(HP/maxHP) ^ 1.8` — nonlinear, punishes damage heavily
+- **Condition:** `(HP/maxHP) ^ 1.8`
 - **Quality:** Awful 0.60 → Legendary 1.20
-- **Skill:** `0.10 + 0.90 × (skill/20)^0.6` — nonlinear, skill 0=10%, skill 10≈74%, skill 20=100%
+- **Skill:** `0.10 + 0.90 × (skill/20)^0.6`
 - **Taint:** 0.50 for tainted items
 - **Rare materials:** Components 0.25, Adv. components 0.15, Chemfuel 0.30
-- **Target:** ~50% return at skill 10, Good quality, 80% HP
-- **Clamped** to base cost; probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed
-
-Material recovery uses `def.CostListAdjusted(thing.Stuff)` as the base, with `def.smeltProducts` added on top for items that have them. Intricate components (components, advanced components) are filtered out by default but exposed as a player-facing setting.
+- Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed
 
 ### Repair (M2)
 - Cycles of 10% maxHP per cycle
-- Cost: `(cycleHP/maxHP) × baseCost × 1.2 × techDifficulty`
-- Tech difficulty: Neolithic 0.80 → Archotech 2.00
-- Success: `(0.50 + skill×0.025) / techDifficulty`
-- Failure: 5% HP loss (minor) or 15% HP / quality drop (critical, below 50% HP)
-- If item reaches 0 HP during repair, it is destroyed and partial materials are reclaimed
+- Tech difficulty from `recipeMaker.researchPrerequisite.techLevel`: Neolithic 0.80 → Archotech 2.00
+- Success: `(0.50 + skill×0.025) / techDifficulty`, clamped [0.05, 1.0]
+- Minor failure: 5% HP loss
+- Critical failure (below 50% HP, 20% of failures): 15% HP loss + quality drop via `CompQuality.SetQuality()`
+- Item destroyed at 0 HP: partial material reclaim scaled by `cyclesCompleted / totalCyclesNeeded`
+- Designation persists until full HP or destruction
 
 ### Clean (M3)
 - Cost: `baseCost × 0.15` (flat, HP-independent)
 - Always succeeds; skill reduces work time
-- Sets `Apparel.WornByCorpse = false` — public setter in RimWorld 1.6, no reflection required
+- `Apparel.WornByCorpse = false` — public setter in 1.6
 
 ## Key API Notes
 
 ### Material Cost Lookup
-- `thing.def.CostListAdjusted(thing.Stuff)` — extension method in `CostListCalculator`, gives adjusted cost list accounting for stuff type
-- `thing.def.smeltProducts` — additional products from smelting (e.g. steel from guns)
-- `ThingDef.intricate` — vanilla field, true for components/advanced components
+- `thing.def.CostListAdjusted(thing.Stuff)` — extension method in `CostListCalculator`
+- `thing.def.smeltProducts` — additional smelting products
+- `ThingDef.intricate` — true for components/advanced components
 
-### Workbench Usability Check
-- `((IBillGiver)bench).UsableForBillsAfterFueling()` — checks power and fuel. Use in `WorkGiver`.
-- `((IBillGiver)bench).CurrentlyUsableForBills()` — checks power only. Use in `JobDriver` tick.
+### Workbench Routing
+- `def.recipeMaker?.recipeUsers` — `List<ThingDef>` of benches where the item is crafted (primary routing)
+- `thing.Smeltable` — fallback routing criterion
+
+### Workbench Usability
+- `((IBillGiver)bench).UsableForBillsAfterFueling()` — WorkGiver check (power + fuel)
 
 ### Designation Management
-- `map.designationManager.AnySpawnedDesignationOfDef(def)` — fast early-out in `WorkGiver.ShouldSkip`
-- `map.designationManager.SpawnedDesignationsOfDef(def)` — iterate for work targets
-- `map.designationManager.RemoveAllDesignationsOn(thing)` — clean up after job completes
+- `AnySpawnedDesignationOfDef` — fast early-out in `WorkGiver.ShouldSkip`
+- `SpawnedDesignationsOfDef` — iterate for work targets
+- `RemoveAllDesignationsOn` — clean up on completion or destruction only
 
 ### Work Speed
-- `GeneralLaborSpeed` is the correct stat for non-recipe manual work (higher base values than `WorkSpeedGlobal`)
-- `WorkTableWorkSpeedFactor` provides the bench multiplier
-- `WorkSpeedGlobal` is too low for recycling — results in jobs taking 100+ seconds
-
-### Taint
-- `Apparel.WornByCorpse` — public getter and **public setter** in 1.6. No reflection needed.
+- `GeneralLaborSpeed` for non-recipe manual work
+- `WorkTableWorkSpeedFactor` for bench multiplier
 
 ### Quality Degradation
-- `CompQuality.qualityInt` is **private** — use `AccessTools.Field(typeof(CompQuality), "qualityInt")` or `Traverse` to read/write for failure penalties.
+- `CompQuality.SetQuality(QualityCategory, ArtGenerationContext?)` — public method, no reflection needed
 
 ## Settings
 
-`Listing_Standard` UI with sliders for tuning values. Reset to defaults button. Uses `Verse.Mod` subclass for `ModSettings` registration — keep separate from `[StaticConstructorOnStartup]` class, never reference Defs from the `Mod` constructor.
+`Listing_Standard` UI with sliders. Reset to defaults. `Verse.Mod` subclass for `ModSettings` — separate from `[StaticConstructorOnStartup]`, never reference Defs from constructor.
 
 ## File Layout
 
@@ -190,20 +145,17 @@ RRRR\
 │   ├── Assemblies\          ← build output
 │   ├── Defs\                ← JobDefs, WorkGiverDefs, DesignationDefs
 │   └── Patches\             ← XML comp injection, Orders menu designators
-├── Textures\
-│   └── UI\Designators\      ← PNG files for DesignationDefs (MUST exist at load time)
+├── Textures\UI\Designators\ ← PNG files (MUST exist at load time)
 ├── Languages\English\Keyed\Keys.xml
 └── Source\
     ├── RRRR.sln / .csproj
-    ├── Setup.cs              ← [StaticConstructorOnStartup] — Harmony init + R4ThingDefCache trigger
+    ├── Setup.cs              ← [StaticConstructorOnStartup] + cache trigger
     ├── Settings.cs           ← Verse.Mod subclass + ModSettings
-    ├── Cache\                ← R4ThingDefCache (bench lists)
+    ├── Cache\                ← R4ThingDefCache (fallback bench lists)
     ├── Comps\                ← CompRecyclable, CompProperties_Recyclable
-    ├── Designators\          ← Designator_RecycleThing, (future: Repair, Clean)
+    ├── Designators\          ← Designator_RecycleThing, Designator_RepairThing
     ├── Jobs\                 ← JobDrivers, WorkGivers
-    ├── RecipeWorkers\        ← M4: bill-based workers
     ├── Utility\              ← MaterialUtility, WorkbenchRouter, SkillUtility
-    ├── Filters\              ← SpecialThingFilterWorkers (M4)
     ├── Patches\              ← Harmony patches (ReverseDesignatorDatabase postfix)
     └── Defs\                 ← R4DefOf
 ```

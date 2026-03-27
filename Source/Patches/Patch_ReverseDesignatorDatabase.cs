@@ -23,6 +23,7 @@ namespace RRRR
 
             desList.Add(new Designator_RecycleThing());
             desList.Add(new Designator_RepairThing());
+            desList.Add(new Designator_CleanThing());
 
             Log.Message($"[R4] Injected R4 designators into ReverseDesignatorDatabase. Total: {desList.Count}");
         }

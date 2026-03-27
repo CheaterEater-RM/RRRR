@@ -4,10 +4,6 @@ using Verse;
 
 namespace RRRR
 {
-    /// <summary>
-    /// Harmony patch entry point. Fires after all Defs are loaded.
-    /// Also triggers the ThingDef cache build.
-    /// </summary>
     [StaticConstructorOnStartup]
     public static class RRRR_Init
     {
@@ -15,23 +11,21 @@ namespace RRRR
         {
             Log.Message("[R4] === R4 Startup Begin ===");
 
-            // Apply Harmony patches
             Log.Message("[R4] Applying Harmony patches...");
             var harmony = new Harmony("com.cheatereater.rrrr");
             harmony.PatchAll();
             Log.Message("[R4] Harmony patches applied successfully.");
 
-            // Verify defs loaded
             VerifyDef<DesignationDef>("R4_Recycle");
             VerifyDef<DesignationDef>("R4_Repair");
+            VerifyDef<DesignationDef>("R4_Clean");
             VerifyDef<JobDef>("RRRR_Recycle");
             VerifyDef<JobDef>("RRRR_Repair");
+            VerifyDef<JobDef>("RRRR_Clean");
 
-            // Trigger the ThingDef cache build explicitly
             Log.Message("[R4] Building ThingDef cache...");
             RuntimeHelpers.RunClassConstructor(typeof(R4ThingDefCache).TypeHandle);
 
-            // Count how many ThingDefs got our comp injected
             int compCount = 0;
             foreach (var def in DefDatabase<ThingDef>.AllDefsListForReading)
             {

@@ -8,7 +8,13 @@
 
   <DesignationDef>
     <defName>R4_Repair</defName>
-    <texturePath>UI/Designators/R4RecycleDesignation</texturePath>
+    <texturePath>UI/Designators/R4RepairDesignation</texturePath>
+    <targetType>Thing</targetType>
+  </DesignationDef>
+
+  <DesignationDef>
+    <defName>R4_Clean</defName>
+    <texturePath>UI/Designators/R4CleanDesignation</texturePath>
     <targetType>Thing</targetType>
   </DesignationDef>
 </Defs>

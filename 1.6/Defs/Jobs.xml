@@ -13,4 +13,11 @@
     <reportString>repairing TargetA.</reportString>
     <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
   </JobDef>
+
+  <JobDef>
+    <defName>RRRR_Clean</defName>
+    <driverClass>RRRR.JobDriver_R4Clean</driverClass>
+    <reportString>cleaning taint from TargetA.</reportString>
+    <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
+  </JobDef>
 </Defs>

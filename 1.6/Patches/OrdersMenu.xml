@@ -5,6 +5,7 @@
     <value>
       <li>RRRR.Designator_RecycleThing</li>
       <li>RRRR.Designator_RepairThing</li>
+      <li>RRRR.Designator_CleanThing</li>
     </value>
   </Operation>
 </Patch>

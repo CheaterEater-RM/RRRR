@@ -12,6 +12,11 @@ namespace RRRR
     /// If the item reaches 0 HP, it is destroyed and partial materials are reclaimed.
     /// 
     /// TargetA = item to repair, TargetB = workbench.
+    /// 
+    /// Designation persistence: the R4_Repair designation stays on the item until
+    /// it reaches full HP or is destroyed. If the pawn gets interrupted or all planned
+    /// cycles finish but the item still has damage (from failures), the designation
+    /// remains so another pawn (or the same pawn) will continue the repair.
     /// </summary>
     public class JobDriver_R4Repair : JobDriver
     {
@@ -85,15 +90,17 @@ namespace RRRR
                     return;
                 }
 
+                if (item.HitPoints >= item.MaxHitPoints)
+                {
+                    // Already at full HP — remove designation and finish
+                    pawn.Map.designationManager.RemoveAllDesignationsOn(item);
+                    EndJobWith(JobCondition.Succeeded);
+                    return;
+                }
+
                 int hpToRepair = item.MaxHitPoints - item.HitPoints;
                 int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * 0.10f));
                 totalCyclesNeeded = Mathf.CeilToInt((float)hpToRepair / cycleHP);
-
-                if (totalCyclesNeeded <= 0)
-                {
-                    pawn.Map.designationManager.RemoveAllDesignationsOn(item);
-                    EndJobWith(JobCondition.Succeeded);
-                }
             };
             yield return initToil;
 
@@ -138,7 +145,7 @@ namespace RRRR
                         return;
                     }
 
-                    // Check if fully repaired
+                    // Check if fully repaired — only NOW remove designation
                     if (item.HitPoints >= item.MaxHitPoints)
                     {
                         Log.Message($"[R4] Repair complete: {item.LabelCap} fully repaired after {cyclesCompleted} cycles.");
@@ -147,11 +154,12 @@ namespace RRRR
                         return;
                     }
 
-                    // More cycles needed?
+                    // All planned cycles done but item still damaged (failures reduced HP).
+                    // End this job attempt but KEEP the designation — another pawn
+                    // (or this pawn) will pick it up again via WorkGiver.
                     if (cyclesCompleted >= totalCyclesNeeded)
                     {
-                        Log.Message($"[R4] Repair done: {item.LabelCap} at {item.HitPoints}/{item.MaxHitPoints} HP after {cyclesCompleted} cycles.");
-                        pawn.Map.designationManager.RemoveAllDesignationsOn(item);
+                        Log.Message($"[R4] Repair pass done: {item.LabelCap} at {item.HitPoints}/{item.MaxHitPoints} HP after {cyclesCompleted} cycles. Designation remains for continued repair.");
                         ReadyForNextToil();
                         return;
                     }
@@ -220,14 +228,10 @@ namespace RRRR
 
         private void HandleItemDestroyed(Thing item)
         {
-            // Capture label before destruction
             string itemLabel = item.LabelCap;
-
             Log.Message($"[R4] Repair failure destroyed: {itemLabel}");
 
             // Reclaim partial materials scaled by cycle progress
-            // Using cycles completed as the progress indicator since HP tracking
-            // is unreliable after failure damage has been applied
             float progressRatio = (float)cyclesCompleted / Mathf.Max(totalCyclesNeeded, 1);
 
             if (!item.Destroyed)

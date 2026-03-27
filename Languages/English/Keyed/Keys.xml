@@ -18,6 +18,13 @@
   <R4_RepairCriticalFailure>{0} badly botched repairing {1}! Quality degraded.</R4_RepairCriticalFailure>
   <R4_RepairItemDestroyed>{0} was destroyed during a failed repair attempt.</R4_RepairItemDestroyed>
 
+  <!-- Clean designator -->
+  <R4_CleanLabel>Clean taint</R4_CleanLabel>
+  <R4_CleanDesc>Designate tainted apparel for cleaning. A colonist will remove the corpse taint at a workbench.</R4_CleanDesc>
+  <R4_MustDesignateTainted>Must designate tainted apparel.</R4_MustDesignateTainted>
+  <R4_NotTainted>Apparel is not tainted.</R4_NotTainted>
+  <R4_AlreadyDesignatedClean>Already designated for cleaning.</R4_AlreadyDesignatedClean>
+
   <!-- Settings UI -->
   <R4_Settings_RecycleHeader>Recycle Settings</R4_Settings_RecycleHeader>
   <R4_Settings_RecycleMult>Material return multiplier</R4_Settings_RecycleMult>

@@ -25,4 +25,17 @@
       <li>Manipulation</li>
     </requiredCapacities>
   </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean</defName>
+    <label>clean tainted apparel</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+  </WorkGiverDef>
 </Defs>
