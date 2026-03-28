@@ -1,14 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  R4 Vanilla Smelting — No longer overriding.
+  R4 Vanilla Smelting Override
 
-  Previous versions of R4 removed SmeltWeapon / SmeltApparel from the smelter
-  because RRRR_RecycleWeapon / RRRR_RecycleApparel bills replaced them.
+  Removes SmeltWeapon, SmeltApparel, and SmeltOrDestroyThing from the electric
+  smelter. Our per-bench recycle bills replace the first two with skill-based
+  recycling. SmeltOrDestroyThing is also removed as it duplicates functionality
+  now covered by the recycle bills.
 
-  With the per-bench bill redesign, recycling lives on the crafting benches
-  (smithy, machining table, tailor bench, etc.) where items are made. The
-  smelter no longer has any RRRR bills, so vanilla smelting is left intact.
+  Kept intact:
+    ExtractMetalFromSlag   — slag processing, unrelated to gear
+    DestroyWeapon          — deliberate destruction, no material return
+    DestroyApparel         — deliberate destruction, no material return
+
+  NOTE: <success>Always</success> = don't fail if target node not found
+  (valid values: Normal, Invert, Always, Never)
 -->
 <Patch>
-  <!-- intentionally empty -->
+
+  <Operation Class="PatchOperationRemove">
+    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltWeapon"]</xpath>
+    <success>Always</success>
+  </Operation>
+
+  <Operation Class="PatchOperationRemove">
+    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltApparel"]</xpath>
+    <success>Always</success>
+  </Operation>
+
+  <Operation Class="PatchOperationRemove">
+    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltOrDestroyThing"]</xpath>
+    <success>Always</success>
+  </Operation>
+
 </Patch>
