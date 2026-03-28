@@ -26,14 +26,21 @@ namespace RRRR
             VerifyDef<JobDef>("RRRR_Clean");
 
             // Verify bill recipes
-            VerifyDef<RecipeDef>("RRRR_RecycleWeapon");
-            VerifyDef<RecipeDef>("RRRR_RecycleApparel");
-            VerifyDef<RecipeDef>("RRRR_RepairWeapon");
-            VerifyDef<RecipeDef>("RRRR_RepairApparel");
-            VerifyDef<RecipeDef>("RRRR_CleanApparel");
+            VerifyDef<RecipeDef>("RRRR_Repair_CraftingSpot");
+            VerifyDef<RecipeDef>("RRRR_Repair_Tailor");
+            VerifyDef<RecipeDef>("RRRR_Repair_Smithy");
+            VerifyDef<RecipeDef>("RRRR_Repair_Machining");
+            VerifyDef<RecipeDef>("RRRR_Repair_Fabrication");
+            VerifyDef<RecipeDef>("RRRR_Recycle_CraftingSpot");
+            VerifyDef<RecipeDef>("RRRR_Recycle_Tailor");
+            VerifyDef<RecipeDef>("RRRR_Recycle_Smithy");
+            VerifyDef<RecipeDef>("RRRR_Recycle_Machining");
+            VerifyDef<RecipeDef>("RRRR_Recycle_Fabrication");
+            VerifyDef<RecipeDef>("RRRR_Clean_CraftingSpot");
+            VerifyDef<RecipeDef>("RRRR_Clean_Tailor");
 
-            Log.Message("[R4] Building ThingDef cache...");
-            RuntimeHelpers.RunClassConstructor(typeof(R4ThingDefCache).TypeHandle);
+            Log.Message("[R4] Building workbench filter cache...");
+            RuntimeHelpers.RunClassConstructor(typeof(R4WorkbenchFilterCache).TypeHandle);
 
             int compCount = 0;
             foreach (var def in DefDatabase<ThingDef>.AllDefsListForReading)

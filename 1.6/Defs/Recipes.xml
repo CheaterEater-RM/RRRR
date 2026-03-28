@@ -1,69 +1,49 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  R4 Recipe Definitions — Bill-based automation
-  
-  RECYCLE + CLEAN: Use vanilla's WorkGiver_DoBill + JobDriver_DoBill with custom
-  RecipeWorkers. The item IS the ingredient; RecipeWorker handles the logic.
-  
-  REPAIR: Uses our custom WorkGiver_R4RepairBill which creates RRRR_Repair jobs
-  with proper material hauling via CollectIngredientsToils. The requiredGiverWorkType
-  is set to prevent vanilla's WorkGiver_DoBill from also processing repair bills.
+  R4 Recipe Definitions — per-bench bills
+
+  ARCHITECTURE:
+  - fixedIngredientFilter in XML is a broad placeholder only.
+    R4WorkbenchFilterCache replaces it at startup with a precise per-bench
+    filter built by inverting each item's recipeMaker.recipeUsers.
+    Items with no recipeMaker are assigned to a bench by techLevel fallback.
+
+  REPAIR: Custom WorkGiver_R4RepairBill pipeline (requiredGiverWorkType=Crafting
+    blocks vanilla WorkGiver_DoBill on all benches; our WorkGiver uses
+    fixedBillGiverDefs directly and is not gated by requiredGiverWorkType).
+
+  RECYCLE + CLEAN: Vanilla DoBill pipeline with custom RecipeWorkers.
+
+  BILL MATRIX:
+    CraftingSpot      → Repair, Recycle, Clean
+    Tailor benches    → Repair, Recycle, Clean
+    Smithy benches    → Repair, Recycle
+    Machining table   → Repair, Recycle
+    Fabrication bench → Repair, Recycle
 -->
 <Defs>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- RECYCLE BILLS (vanilla DoBill pipeline)     -->
-  <!-- ═══════════════════════════════════════════ -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- BASE ABSTRACTS                                              -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
 
-  <RecipeDef>
-    <defName>RRRR_RecycleWeapon</defName>
-    <label>recycle weapon</label>
-    <description>Break down a weapon to recover materials. Returns depend on condition, quality, and crafter skill — superior to basic smelting.</description>
-    <jobString>Recycling weapon.</jobString>
-    <workAmount>1600</workAmount>
+  <RecipeDef Name="RRRR_RepairBase" Abstract="true">
+    <jobString>Repairing item.</jobString>
+    <workAmount>800</workAmount>
     <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
     <workSkill>Crafting</workSkill>
     <effectWorking>Smith</effectWorking>
     <soundWorking>Recipe_Smith</soundWorking>
-    <workerClass>RRRR.RecipeWorker_R4Recycle</workerClass>
+    <workerClass>RRRR.RecipeWorker_R4Repair</workerClass>
+    <!-- Block vanilla WorkGiver_DoBill on all bench types (Smithing/Tailoring).
+         Our WorkGiver_R4RepairBill uses fixedBillGiverDefs and is not gated
+         by requiredGiverWorkType. -->
+    <requiredGiverWorkType>Crafting</requiredGiverWorkType>
     <ingredients>
       <li>
         <filter>
           <categories>
             <li>Weapons</li>
-          </categories>
-        </filter>
-        <count>1</count>
-      </li>
-    </ingredients>
-    <fixedIngredientFilter>
-      <categories>
-        <li>Weapons</li>
-      </categories>
-    </fixedIngredientFilter>
-    <recipeUsers>
-      <li>ElectricSmelter</li>
-      <li>ElectricSmithy</li>
-      <li>FueledSmithy</li>
-      <li>TableMachining</li>
-    </recipeUsers>
-  </RecipeDef>
-
-  <RecipeDef>
-    <defName>RRRR_RecycleApparel</defName>
-    <label>recycle apparel</label>
-    <description>Break down apparel to recover materials. Returns depend on condition, quality, and crafter skill — superior to basic smelting.</description>
-    <jobString>Recycling apparel.</jobString>
-    <workAmount>1600</workAmount>
-    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
-    <workSkill>Crafting</workSkill>
-    <effectWorking>Tailor</effectWorking>
-    <soundWorking>Recipe_Tailor</soundWorking>
-    <workerClass>RRRR.RecipeWorker_R4Recycle</workerClass>
-    <ingredients>
-      <li>
-        <filter>
-          <categories>
             <li>Apparel</li>
           </categories>
         </filter>
@@ -72,78 +52,23 @@
     </ingredients>
     <fixedIngredientFilter>
       <categories>
+        <li>Weapons</li>
         <li>Apparel</li>
       </categories>
     </fixedIngredientFilter>
-    <recipeUsers>
-      <li>ElectricSmelter</li>
-      <li>ElectricTailoringBench</li>
-      <li>HandTailoringBench</li>
-    </recipeUsers>
   </RecipeDef>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- REPAIR BILLS (custom WorkGiver pipeline)    -->
-  <!--                                             -->
-  <!-- requiredGiverWorkType prevents vanilla's    -->
-  <!-- WorkGiver_DoBill from processing these.     -->
-  <!-- Our WorkGiver_R4RepairBill handles them     -->
-  <!-- and creates RRRR_Repair jobs with proper    -->
-  <!-- ingredient hauling.                         -->
-  <!-- ═══════════════════════════════════════════ -->
-
-  <RecipeDef>
-    <defName>RRRR_RepairWeapon</defName>
-    <label>repair weapon</label>
-    <description>Repair a damaged weapon. Each cycle restores HP based on skill, consuming materials hauled to the bench. Items with minor damage (≤5%) are mended for free.</description>
-    <jobString>Repairing weapon.</jobString>
-    <workAmount>800</workAmount>
+  <RecipeDef Name="RRRR_RecycleBase" Abstract="true">
+    <jobString>Recycling item.</jobString>
+    <workAmount>1600</workAmount>
     <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
     <workSkill>Crafting</workSkill>
-    <effectWorking>Smith</effectWorking>
-    <soundWorking>Recipe_Smith</soundWorking>
-    <workerClass>RRRR.RecipeWorker_R4Repair</workerClass>
-    <!-- Block vanilla WorkGiver_DoBill: smithy uses Smithing, not Crafting -->
-    <requiredGiverWorkType>Crafting</requiredGiverWorkType>
+    <workerClass>RRRR.RecipeWorker_R4Recycle</workerClass>
     <ingredients>
       <li>
         <filter>
           <categories>
             <li>Weapons</li>
-          </categories>
-        </filter>
-        <count>1</count>
-      </li>
-    </ingredients>
-    <fixedIngredientFilter>
-      <categories>
-        <li>Weapons</li>
-      </categories>
-    </fixedIngredientFilter>
-    <recipeUsers>
-      <li>ElectricSmithy</li>
-      <li>FueledSmithy</li>
-      <li>TableMachining</li>
-    </recipeUsers>
-  </RecipeDef>
-
-  <RecipeDef>
-    <defName>RRRR_RepairApparel</defName>
-    <label>repair apparel</label>
-    <description>Repair damaged apparel. Each cycle restores HP based on skill, consuming materials hauled to the bench. Items with minor damage (≤5%) are mended for free.</description>
-    <jobString>Repairing apparel.</jobString>
-    <workAmount>800</workAmount>
-    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
-    <workSkill>Crafting</workSkill>
-    <effectWorking>Tailor</effectWorking>
-    <soundWorking>Recipe_Tailor</soundWorking>
-    <workerClass>RRRR.RecipeWorker_R4Repair</workerClass>
-    <!-- Block vanilla WorkGiver_DoBill: tailor uses Tailoring, not Crafting -->
-    <requiredGiverWorkType>Crafting</requiredGiverWorkType>
-    <ingredients>
-      <li>
-        <filter>
-          <categories>
             <li>Apparel</li>
           </categories>
         </filter>
@@ -152,24 +77,14 @@
     </ingredients>
     <fixedIngredientFilter>
       <categories>
+        <li>Weapons</li>
         <li>Apparel</li>
       </categories>
     </fixedIngredientFilter>
-    <recipeUsers>
-      <li>ElectricTailoringBench</li>
-      <li>HandTailoringBench</li>
-    </recipeUsers>
   </RecipeDef>
 
-  <!-- ═══════════════════════════════════════════ -->
-  <!-- CLEAN BILLS (vanilla DoBill pipeline)       -->
-  <!-- ═══════════════════════════════════════════ -->
-
-  <RecipeDef>
-    <defName>RRRR_CleanApparel</defName>
-    <label>clean tainted apparel</label>
-    <description>Remove corpse taint from apparel. The item is cleaned, not consumed.</description>
-    <jobString>Cleaning taint from apparel.</jobString>
+  <RecipeDef Name="RRRR_CleanBase" Abstract="true">
+    <jobString>Cleaning taint from item.</jobString>
     <workAmount>800</workAmount>
     <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
     <workSkill>Crafting</workSkill>
@@ -191,9 +106,154 @@
         <li>Apparel</li>
       </categories>
     </fixedIngredientFilter>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- CRAFTING SPOT                                               -->
+  <!-- Handles: tribal weapons, basic apparel, primitive items     -->
+  <!-- workType: Crafting (vanilla DoBillsUseCraftingSpot)         -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <RecipeDef ParentName="RRRR_RepairBase">
+    <defName>RRRR_Repair_CraftingSpot</defName>
+    <label>repair item</label>
+    <description>Repair a damaged item at the crafting spot.</description>
     <recipeUsers>
-      <li>ElectricTailoringBench</li>
+      <li>CraftingSpot</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_RecycleBase">
+    <defName>RRRR_Recycle_CraftingSpot</defName>
+    <label>recycle item</label>
+    <description>Break down an item to recover materials.</description>
+    <effectWorking>Smith</effectWorking>
+    <soundWorking>Recipe_Smith</soundWorking>
+    <recipeUsers>
+      <li>CraftingSpot</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_CleanBase">
+    <defName>RRRR_Clean_CraftingSpot</defName>
+    <label>clean tainted item</label>
+    <description>Remove corpse taint from apparel at the crafting spot.</description>
+    <recipeUsers>
+      <li>CraftingSpot</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TAILOR BENCH                                                -->
+  <!-- Handles: fabric/leather apparel                             -->
+  <!-- workType: Tailoring                                         -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <RecipeDef ParentName="RRRR_RepairBase">
+    <defName>RRRR_Repair_Tailor</defName>
+    <label>repair item</label>
+    <description>Repair damaged apparel at the tailor bench.</description>
+    <effectWorking>Tailor</effectWorking>
+    <soundWorking>Recipe_Tailor</soundWorking>
+    <recipeUsers>
       <li>HandTailoringBench</li>
+      <li>ElectricTailoringBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_RecycleBase">
+    <defName>RRRR_Recycle_Tailor</defName>
+    <label>recycle item</label>
+    <description>Break down apparel to recover materials at the tailor bench.</description>
+    <effectWorking>Tailor</effectWorking>
+    <soundWorking>Recipe_Tailor</soundWorking>
+    <recipeUsers>
+      <li>HandTailoringBench</li>
+      <li>ElectricTailoringBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_CleanBase">
+    <defName>RRRR_Clean_Tailor</defName>
+    <label>clean tainted item</label>
+    <description>Remove corpse taint from apparel at the tailor bench.</description>
+    <recipeUsers>
+      <li>HandTailoringBench</li>
+      <li>ElectricTailoringBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- SMITHY                                                      -->
+  <!-- Handles: medieval melee weapons, smithed armour             -->
+  <!-- workType: Smithing                                          -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <RecipeDef ParentName="RRRR_RepairBase">
+    <defName>RRRR_Repair_Smithy</defName>
+    <label>repair item</label>
+    <description>Repair a damaged weapon or piece of armour at the smithy.</description>
+    <recipeUsers>
+      <li>FueledSmithy</li>
+      <li>ElectricSmithy</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_RecycleBase">
+    <defName>RRRR_Recycle_Smithy</defName>
+    <label>recycle item</label>
+    <description>Break down a weapon or piece of armour to recover materials at the smithy.</description>
+    <recipeUsers>
+      <li>FueledSmithy</li>
+      <li>ElectricSmithy</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- MACHINING TABLE                                             -->
+  <!-- Handles: firearms, flak/tech armour                         -->
+  <!-- workType: Smithing                                          -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <RecipeDef ParentName="RRRR_RepairBase">
+    <defName>RRRR_Repair_Machining</defName>
+    <label>repair item</label>
+    <description>Repair a firearm or piece of armour at the machining table.</description>
+    <recipeUsers>
+      <li>TableMachining</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_RecycleBase">
+    <defName>RRRR_Recycle_Machining</defName>
+    <label>recycle item</label>
+    <description>Disassemble a firearm or piece of armour to recover materials.</description>
+    <recipeUsers>
+      <li>TableMachining</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- FABRICATION BENCH                                           -->
+  <!-- Handles: power armour, marine armour, high-tech apparel     -->
+  <!-- workType: Smithing                                          -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <RecipeDef ParentName="RRRR_RepairBase">
+    <defName>RRRR_Repair_Fabrication</defName>
+    <label>repair item</label>
+    <description>Repair advanced equipment at the fabrication bench.</description>
+    <recipeUsers>
+      <li>FabricationBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef ParentName="RRRR_RecycleBase">
+    <defName>RRRR_Recycle_Fabrication</defName>
+    <label>recycle item</label>
+    <description>Disassemble advanced equipment to recover materials.</description>
+    <recipeUsers>
+      <li>FabricationBench</li>
     </recipeUsers>
   </RecipeDef>
 

@@ -13,11 +13,8 @@ namespace RRRR
     /// </summary>
     public class WorkGiver_R4RepairBill : WorkGiver_Scanner
     {
-        private static readonly HashSet<string> RepairRecipeDefNames = new HashSet<string>
-        {
-            "RRRR_RepairWeapon",
-            "RRRR_RepairApparel"
-        };
+        private static bool IsRepairRecipe(RecipeDef recipe) =>
+            recipe.workerClass == typeof(RecipeWorker_R4Repair);
 
         public override PathEndMode PathEndMode => PathEndMode.InteractionCell;
 
@@ -54,7 +51,7 @@ namespace RRRR
 
             foreach (Bill bill in billGiver.BillStack)
             {
-                if (!RepairRecipeDefNames.Contains(bill.recipe.defName))
+                if (!IsRepairRecipe(bill.recipe))
                     continue;
                 if (!bill.ShouldDoNow() || !bill.PawnAllowedToStartAnew(pawn))
                     continue;
