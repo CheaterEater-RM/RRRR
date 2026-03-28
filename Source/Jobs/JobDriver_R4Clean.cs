@@ -8,14 +8,13 @@ namespace RRRR
 {
     /// <summary>
     /// Clean job using vanilla ingredient-gathering pattern.
+    /// Works for both designation-based and bill-based cleaning.
     /// 
     /// Target layout (matches vanilla DoBill):
     ///   TargetA = workbench
     ///   TargetQueueA[0] = tainted apparel
     ///   TargetQueueB = ingredient stacks
     ///   TargetC = ingredient placement cell
-    /// 
-    /// Flow: gather ingredients → goto bench → haul apparel → work → consume → remove taint.
     /// </summary>
     public class JobDriver_R4Clean : JobDriver
     {
@@ -27,6 +26,7 @@ namespace RRRR
         private float totalWork;
 
         private Thing Bench => job.GetTarget(BenchInd).Thing;
+        private bool IsBillDriven => job.bill != null;
 
         private Thing _cachedItem;
         private Thing CleanItem
@@ -70,11 +70,18 @@ namespace RRRR
         protected override IEnumerable<Toil> MakeNewToils()
         {
             this.FailOnDestroyedNullOrForbidden(BenchInd);
+
+            // Fail condition depends on whether bill or designation driven
             this.FailOn(delegate
             {
                 Thing item = CleanItem;
                 if (item == null || item.Destroyed)
                     return true;
+
+                if (IsBillDriven)
+                    return job.bill.DeletedOrDereferenced || job.bill.suspended;
+
+                // Designation-driven: fail if designation removed
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean) == null)
                     return true;
                 return false;
@@ -200,7 +207,15 @@ namespace RRRR
                 {
                     apparel.WornByCorpse = false;
                     apparel.Notify_ColorChanged();
-                    Log.Message($"[R4] Cleaned taint from: {apparel.LabelCap}");
+                    // Uncomment for debugging:
+                    // Log.Message($"[R4] Cleaned taint from: {apparel.LabelCap}");
+                }
+
+                // Notify bill if bill-driven
+                if (IsBillDriven)
+                {
+                    var ingredients = new List<Thing> { item };
+                    job.bill.Notify_IterationCompleted(pawn, ingredients);
                 }
 
                 var des = pawn.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean);

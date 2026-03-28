@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R4 Recipe Definitions — Bill-based automation
+  
+  These use vanilla's JobDriver_DoBill pipeline with custom RecipeWorkers.
+  The item to process IS the ingredient.
+  
+  workerClass overrides ConsumeIngredient (don't destroy) and
+  Notify_IterationCompleted (spawn products / modify item using pawn skill).
+  
+  This means bills work through EITHER:
+  - Vanilla's WorkGiver_DoBill → JobDriver_DoBill → RecipeWorker (standard path)
+  - Our WorkGiver_R4DoBill → our custom JobDrivers (custom path, handles edge cases)
+  Both paths produce correct results.
+-->
+<Defs>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- RECYCLE BILLS                               -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <RecipeDef>
+    <defName>RRRR_RecycleWeapon</defName>
+    <label>recycle weapon</label>
+    <description>Break down a weapon to recover materials. Returns depend on condition, quality, and crafter skill — superior to basic smelting.</description>
+    <jobString>Recycling weapon.</jobString>
+    <workAmount>1600</workAmount>
+    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
+    <workSkill>Crafting</workSkill>
+    <effectWorking>Smith</effectWorking>
+    <soundWorking>Recipe_Smith</soundWorking>
+    <workerClass>RRRR.RecipeWorker_R4Recycle</workerClass>
+    <ingredients>
+      <li>
+        <filter>
+          <categories>
+            <li>Weapons</li>
+          </categories>
+        </filter>
+        <count>1</count>
+      </li>
+    </ingredients>
+    <fixedIngredientFilter>
+      <categories>
+        <li>Weapons</li>
+      </categories>
+    </fixedIngredientFilter>
+    <recipeUsers>
+      <li>ElectricSmelter</li>
+      <li>ElectricSmithy</li>
+      <li>FueledSmithy</li>
+      <li>TableMachining</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef>
+    <defName>RRRR_RecycleApparel</defName>
+    <label>recycle apparel</label>
+    <description>Break down apparel to recover materials. Returns depend on condition, quality, and crafter skill — superior to basic smelting.</description>
+    <jobString>Recycling apparel.</jobString>
+    <workAmount>1600</workAmount>
+    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
+    <workSkill>Crafting</workSkill>
+    <effectWorking>Tailor</effectWorking>
+    <soundWorking>Recipe_Tailor</soundWorking>
+    <workerClass>RRRR.RecipeWorker_R4Recycle</workerClass>
+    <ingredients>
+      <li>
+        <filter>
+          <categories>
+            <li>Apparel</li>
+          </categories>
+        </filter>
+        <count>1</count>
+      </li>
+    </ingredients>
+    <fixedIngredientFilter>
+      <categories>
+        <li>Apparel</li>
+      </categories>
+    </fixedIngredientFilter>
+    <recipeUsers>
+      <li>ElectricSmelter</li>
+      <li>ElectricTailoringBench</li>
+      <li>HandTailoringBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- CLEAN BILLS                                 -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <RecipeDef>
+    <defName>RRRR_CleanApparel</defName>
+    <label>clean tainted apparel</label>
+    <description>Remove corpse taint from apparel. The item is cleaned, not consumed.</description>
+    <jobString>Cleaning taint from apparel.</jobString>
+    <workAmount>800</workAmount>
+    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
+    <workSkill>Crafting</workSkill>
+    <effectWorking>Tailor</effectWorking>
+    <soundWorking>Recipe_Tailor</soundWorking>
+    <workerClass>RRRR.RecipeWorker_R4Clean</workerClass>
+    <ingredients>
+      <li>
+        <filter>
+          <categories>
+            <li>Apparel</li>
+          </categories>
+        </filter>
+        <count>1</count>
+      </li>
+    </ingredients>
+    <fixedIngredientFilter>
+      <categories>
+        <li>Apparel</li>
+      </categories>
+    </fixedIngredientFilter>
+    <recipeUsers>
+      <li>ElectricTailoringBench</li>
+      <li>HandTailoringBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+</Defs>

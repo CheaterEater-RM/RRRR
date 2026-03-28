@@ -9,13 +9,21 @@ namespace RRRR
     /// Scans for items designated R4_Repair, finds a nearby bench and
     /// the required materials, and creates a job with ingredients queued.
     /// 
+    /// Minor mending: items at ≥95% HP are repaired for free (no materials).
+    /// 
     /// Job target layout (matches vanilla DoBill pattern):
     ///   TargetA = workbench
     ///   TargetQueueA[0] = item to repair (single-element queue)
-    ///   TargetQueueB = ingredient stacks, countQueue = amounts
+    ///   TargetQueueB = ingredient stacks, countQueue = amounts (empty for minor mending)
     /// </summary>
     public class WorkGiver_R4Repair : WorkGiver_Scanner
     {
+        /// <summary>
+        /// Items at or above this HP fraction are considered minor damage
+        /// and can be mended for free without materials.
+        /// </summary>
+        public const float MinorMendingThreshold = 0.95f;
+
         public override PathEndMode PathEndMode => PathEndMode.Touch;
 
         public override bool ShouldSkip(Pawn pawn, bool forced = false)
@@ -32,6 +40,13 @@ namespace RRRR
             }
         }
 
+        public static bool IsMinorMending(Thing item)
+        {
+            if (!item.def.useHitPoints || item.MaxHitPoints <= 0)
+                return false;
+            return (float)item.HitPoints / item.MaxHitPoints >= MinorMendingThreshold;
+        }
+
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
             if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Repair) == null)
@@ -45,11 +60,15 @@ namespace RRRR
             if (bench == null)
                 return false;
 
-            var cycleCost = MaterialUtility.GetRepairCycleCost(t);
-            if (cycleCost.Count > 0)
+            // Minor mending: skip material check — it's free
+            if (!IsMinorMending(t))
             {
-                if (!MaterialUtility.TryFindIngredients(cycleCost, pawn, out _, out _))
-                    return false;
+                var cycleCost = MaterialUtility.GetRepairCycleCost(t);
+                if (cycleCost.Count > 0)
+                {
+                    if (!MaterialUtility.TryFindIngredients(cycleCost, pawn, out _, out _))
+                        return false;
+                }
             }
 
             return true;
@@ -64,27 +83,28 @@ namespace RRRR
             if (bench == null)
                 return null;
 
-            var cycleCost = MaterialUtility.GetRepairCycleCost(t);
-
             // TargetA = bench (matches vanilla DoBill)
             Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, bench);
             job.count = 1;
-
-            // Item stored in targetQueueA as single element
             job.targetQueueA = new List<LocalTargetInfo> { t };
 
-            // Ingredients in targetQueueB
-            if (cycleCost.Count > 0)
+            // Minor mending: no ingredients needed
+            job.targetQueueB = new List<LocalTargetInfo>();
+            job.countQueue = new List<int>();
+            
+            if (!IsMinorMending(t))
             {
-                if (!MaterialUtility.TryFindIngredients(cycleCost, pawn, out var foundThings, out var foundCounts))
-                    return null;
-
-                job.targetQueueB = new List<LocalTargetInfo>();
-                job.countQueue = new List<int>();
-                for (int i = 0; i < foundThings.Count; i++)
+                var cycleCost = MaterialUtility.GetRepairCycleCost(t);
+                if (cycleCost.Count > 0)
                 {
-                    job.targetQueueB.Add(foundThings[i]);
-                    job.countQueue.Add(foundCounts[i]);
+                    if (!MaterialUtility.TryFindIngredients(cycleCost, pawn, out var foundThings, out var foundCounts))
+                        return null;
+
+                    for (int i = 0; i < foundThings.Count; i++)
+                    {
+                        job.targetQueueB.Add(foundThings[i]);
+                        job.countQueue.Add(foundCounts[i]);
+                    }
                 }
             }
 

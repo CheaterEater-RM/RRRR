@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R4 Vanilla Smelting Override
+  
+  Removes vanilla SmeltWeapon and SmeltApparel from the electric smelter.
+  Our RRRR_RecycleWeapon and RRRR_RecycleApparel replace them (added via recipeUsers).
+  
+  Our recycling is strictly superior: it considers HP, quality, skill, and taint,
+  whereas vanilla smelting always returns a flat 25% ignoring all factors.
+  
+  We keep the other smelter recipes (ExtractMetalFromSlag, SmeltOrDestroyThing,
+  DestroyWeapon, DestroyApparel) untouched.
+  
+  NOTE: <success>Always</success> means "don't fail even if target not found"
+  (valid values: Normal, Invert, Always, Never — NOT "Maybe")
+-->
+<Patch>
+
+  <!-- Remove SmeltWeapon from smelter -->
+  <Operation Class="PatchOperationRemove">
+    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltWeapon"]</xpath>
+    <success>Always</success>
+  </Operation>
+
+  <!-- Remove SmeltApparel from smelter -->
+  <Operation Class="PatchOperationRemove">
+    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltApparel"]</xpath>
+    <success>Always</success>
+  </Operation>
+
+</Patch>

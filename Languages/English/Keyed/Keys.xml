@@ -8,7 +8,7 @@
 
   <!-- Repair designator -->
   <R4_RepairLabel>Repair</R4_RepairLabel>
-  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Success depends on skill and tech level.</R4_RepairDesc>
+  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Items with minor damage (≤5%) are mended for free. Success depends on skill and tech level.</R4_RepairDesc>
   <R4_MustDesignateRepairable>Must designate a damaged weapon or apparel.</R4_MustDesignateRepairable>
   <R4_NotDamaged>Item is not damaged.</R4_NotDamaged>
   <R4_AlreadyDesignatedRepair>Already designated for repair.</R4_AlreadyDesignatedRepair>

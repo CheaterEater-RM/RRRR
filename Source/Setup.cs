@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using HarmonyLib;
+using RimWorld;
 using Verse;
 
 namespace RRRR
@@ -16,12 +17,18 @@ namespace RRRR
             harmony.PatchAll();
             Log.Message("[R4] Harmony patches applied successfully.");
 
+            // Verify designations and jobs
             VerifyDef<DesignationDef>("R4_Recycle");
             VerifyDef<DesignationDef>("R4_Repair");
             VerifyDef<DesignationDef>("R4_Clean");
             VerifyDef<JobDef>("RRRR_Recycle");
             VerifyDef<JobDef>("RRRR_Repair");
             VerifyDef<JobDef>("RRRR_Clean");
+
+            // Verify bill recipes
+            VerifyDef<RecipeDef>("RRRR_RecycleWeapon");
+            VerifyDef<RecipeDef>("RRRR_RecycleApparel");
+            VerifyDef<RecipeDef>("RRRR_CleanApparel");
 
             Log.Message("[R4] Building ThingDef cache...");
             RuntimeHelpers.RunClassConstructor(typeof(R4ThingDefCache).TypeHandle);

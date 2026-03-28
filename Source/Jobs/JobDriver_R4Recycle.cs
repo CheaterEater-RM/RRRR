@@ -9,12 +9,9 @@ namespace RRRR
     /// Recycle job: haul item to workbench → work → spawn materials → destroy item.
     /// TargetA = item to recycle, TargetB = workbench.
     /// 
-    /// Toil sequence:
-    /// 1. Go to item, pick it up
-    /// 2. Carry to bench interaction cell
-    /// 3. Drop at feet (near bench)
-    /// 4. Work toil with progress bar
-    /// 5. Spawn materials, destroy item, clear designation
+    /// Works for both designation-based and bill-based recycling.
+    /// When job.bill is set, notifies the bill on completion and skips
+    /// designation checks.
     /// </summary>
     public class JobDriver_R4Recycle : JobDriver
     {
@@ -26,6 +23,8 @@ namespace RRRR
 
         private Thing Item => job.GetTarget(ItemInd).Thing;
         private Thing Bench => job.GetTarget(BenchInd).Thing;
+
+        private bool IsBillDriven => job.bill != null;
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
@@ -45,34 +44,38 @@ namespace RRRR
 
         protected override IEnumerable<Toil> MakeNewToils()
         {
-            // Fail conditions: abort if item or bench is destroyed/forbidden/designation removed
             this.FailOnDestroyedNullOrForbidden(ItemInd);
             this.FailOnDestroyedNullOrForbidden(BenchInd);
-            this.FailOnThingMissingDesignation(ItemInd, R4DefOf.R4_Recycle);
 
-            // 1. Go to the item
+            // Only check designation for non-bill jobs
+            if (!IsBillDriven)
+                this.FailOnThingMissingDesignation(ItemInd, R4DefOf.R4_Recycle);
+
+            // For bill jobs, fail if bill is deleted or suspended
+            if (IsBillDriven)
+            {
+                this.FailOn(delegate
+                {
+                    return job.bill.DeletedOrDereferenced || job.bill.suspended;
+                });
+            }
+
             yield return Toils_Goto.GotoThing(ItemInd, PathEndMode.ClosestTouch)
                 .FailOnSomeonePhysicallyInteracting(ItemInd);
 
-            // 2. Pick up the item
             yield return Toils_Haul.StartCarryThing(ItemInd);
 
-            // 3. Carry to bench interaction cell
             yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
 
-            // 4. Drop the item at the pawn's current position (near the bench)
             Toil dropToil = ToilMaker.MakeToil("R4_Recycle_Drop");
             dropToil.defaultCompleteMode = ToilCompleteMode.Instant;
             dropToil.initAction = delegate
             {
                 if (pawn.carryTracker.CarriedThing != null)
-                {
                     pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out _);
-                }
             };
             yield return dropToil;
 
-            // 5. Work toil — face bench, do work over time
             Toil workToil = ToilMaker.MakeToil("R4_Recycle_Work");
             workToil.defaultCompleteMode = ToilCompleteMode.Never;
             workToil.handlingFacing = true;
@@ -82,32 +85,19 @@ namespace RRRR
             workToil.initAction = delegate
             {
                 totalWork = MaterialUtility.GetRecycleWorkAmount(Item);
-                if (totalWork <= 0f)
-                    totalWork = 500f;
-
-                // On fresh start, set workLeft. On save-load, it's already restored.
-                if (workLeft <= 0f)
-                    workLeft = totalWork;
+                if (totalWork <= 0f) totalWork = 500f;
+                if (workLeft <= 0f) workLeft = totalWork;
             };
 
             workToil.tickAction = delegate
             {
                 pawn.rotationTracker.FaceTarget(Bench);
-
-                // GeneralLaborSpeed is the standard stat for non-recipe manual work.
-                // Typical values: ~1.0 for healthy pawns, higher with traits/bionics.
-                // Bench factor from WorkTableWorkSpeedFactor (typically 1.0 for crafting benches).
                 float pawnSpeed = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
                 float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
-                float workDone = pawnSpeed * benchFactor;
-
-                workLeft -= workDone;
+                workLeft -= pawnSpeed * benchFactor;
                 pawn.skills?.Learn(SkillDefOf.Crafting, 0.1f);
-
                 if (workLeft <= 0f)
-                {
                     ReadyForNextToil();
-                }
             };
 
             workToil.WithProgressBar(ItemInd, delegate
@@ -118,7 +108,6 @@ namespace RRRR
 
             yield return workToil;
 
-            // 6. Completion: spawn products, destroy item, remove designation
             Toil finishToil = ToilMaker.MakeToil("R4_Recycle_Finish");
             finishToil.defaultCompleteMode = ToilCompleteMode.Instant;
             finishToil.initAction = delegate
@@ -127,10 +116,8 @@ namespace RRRR
                 if (item == null || item.Destroyed)
                     return;
 
-                // Spawn materials at the pawn's position
                 var products = MaterialUtility.DoRecycleProducts(item, pawn, pawn.Position, pawn.Map);
 
-                // Debug log (remove in M5)
                 if (products.Count > 0)
                 {
                     var sb = new System.Text.StringBuilder();
@@ -143,10 +130,14 @@ namespace RRRR
                     Log.Message(sb.ToString());
                 }
 
-                // Remove designation before destroying
-                pawn.Map.designationManager.RemoveAllDesignationsOn(item);
+                // Notify the bill if this was bill-driven
+                if (IsBillDriven)
+                {
+                    var ingredients = new List<Thing> { item };
+                    job.bill.Notify_IterationCompleted(pawn, ingredients);
+                }
 
-                // Destroy the original item
+                pawn.Map.designationManager.RemoveAllDesignationsOn(item);
                 item.Destroy(DestroyMode.Vanish);
             };
 

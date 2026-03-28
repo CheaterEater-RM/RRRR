@@ -6,47 +6,45 @@ Recycle, Repair, Clean all functional with designator-based workflow.
 
 ---
 
-## Material Cost & Ingredient Gathering Rework ✅
+## Material Cost & Ingredient Gathering ✅
 
-**Problems fixed:**
-1. Drag-select didn't work — designators lacked `DrawStyleCategory` override
-2. Materials consumed remotely from map without pawns physically hauling them
-3. Repair infinite loop when materials unavailable — pawn kept retrying with no materials
-4. Revolver worked without materials because steel was consumed from elsewhere on map
-
-**Solution: Vanilla-compatible ingredient queue pattern:**
-- WorkGiver calculates cost, finds material stacks, populates `job.targetQueueB` + `job.countQueue`
-- JobDriver Phase 1: extract from queue → goto → carry → place on bench → loop
-- JobDriver Phase 2: haul item to bench
-- JobDriver Phase 3: work
-- JobDriver Phase 4: consume ingredients from bench cells, apply result
-- If materials unavailable, WorkGiver simply doesn't create the job (no infinite loop)
-
-**Repair:** One cycle per job. Each cycle gathers materials → works → skill check. If item still damaged, designation stays and WorkGiver creates a new job with fresh ingredients for the next cycle.
-
-**Clean:** All materials gathered upfront → work → consume → remove taint.
-
-**Drag-select fix:** Added `DrawStyleCategoryDef DrawStyleCategory => DrawStyleCategoryDefOf.FilledRectangle` to all three designators. This enables the vanilla drag-rectangle rendering.
-
-**Material costs (deterministic, ceiling-rounded):**
-- Repair cycle: 10% of base materials × 1.2 × techDifficulty per cycle. Components at 50% rate.
-- Clean: 20% of base materials (non-intricate). Minimum 1 of primary material.
-
-**Files changed:**
-- `MaterialUtility.cs` — added `TryFindIngredients()`, `ConsumeIngredientsOnBench()`, switched to ceiling rounding
-- `WorkGiver_R4Repair.cs` — finds ingredients, populates job queues
-- `WorkGiver_R4Clean.cs` — finds ingredients, populates job queues
-- `JobDriver_R4Repair.cs` — full rewrite with ingredient hauling phase
-- `JobDriver_R4Clean.cs` — full rewrite with ingredient hauling phase
-- All three `Designator_*.cs` — added `DrawStyleCategory` override
+Vanilla-compatible ingredient queue pattern using `JobDriver_DoBill.CollectIngredientsToils()`.
 
 ---
 
-## M4: Bill-Based Automation
+## M4: Bill-Based Automation ✅
 
-- [ ] `SpecialThingFilterDef` entries (**all must have `<parentCategory>`!**)
-- [ ] `RecipeDef` entries for bill-based recycle/repair/clean
-- [ ] `SpecialThingFilterWorker` and `RecipeWorker` subclasses
+**Architecture:** RecipeDefs provide the bill UI (filters, quality/HP sliders). A custom
+`WorkGiver_R4DoBill` scans bill stacks on specific benches, finds matching items, and
+creates our existing custom jobs (not vanilla's `JobDriver_DoBill`). This follows the
+pattern established by the RepairableGear reference mod.
+
+**Key design:** RecipeDefs with empty `<products/>` and no `workerClass` — they're purely
+UI definitions. The WorkGiver checks `bill.IsFixedOrAllowedIngredient(t)` against items
+on the map, then creates our `RRRR_Recycle` or `RRRR_Clean` jobs.
+
+**Vanilla smelting override:** XML patches remove SmeltWeapon/SmeltApparel from the smelter.
+Our recycle bills replace them with HP/quality/skill-aware material returns.
+
+**WorkGiver binding via workType:**
+- Smelter + Machining → `Crafting` work type
+- Smithy → `Smithing` work type
+- Tailor benches → `Tailoring` work type
+
+**JobDrivers updated:** Both `JobDriver_R4Recycle` and `JobDriver_R4Clean` now handle
+bill-driven jobs alongside designation-driven jobs. Bill jobs skip designation checks
+and call `bill.Notify_IterationCompleted` on completion.
+
+**Minor mending (≥95% HP = free repair):** Integrated into `WorkGiver_R4Repair` —
+skips material finding when item HP is at or above 95%.
+
+**Files:**
+- `WorkGiver_R4DoBill.cs` — custom WorkGiver that scans bill stacks
+- `WorkGivers.xml` — 4 new bill-based WorkGiverDefs (smelter, smithy, machining, tailor)
+- `Recipes.xml` — 3 RecipeDefs with empty products
+- `VanillaSmelting.xml` — patches removing SmeltWeapon/SmeltApparel from smelter
+- `JobDriver_R4Recycle.cs` — updated for bill support
+- `JobDriver_R4Clean.cs` — updated for bill support
 
 ---
 
@@ -58,21 +56,27 @@ Recycle, Repair, Clean all functional with designator-based workflow.
 - [ ] README.md, Steam Workshop assets
 - [ ] Compatibility testing (CE, VE, etc.)
 - [ ] Performance profiling
+- [ ] Minor mending polish (messaging, designator tooltip)
 
 ---
 
 ## Lessons Learned
 
-**XML safety:** No Sequence/Conditional for comp injection. Every SpecialThingFilterDef needs parentCategory.
+**Bill system architecture:** Don't try to use vanilla's `JobDriver_DoBill` with custom
+`RecipeWorker` overrides — it's fragile and hard to debug. Instead, use RecipeDefs purely
+for the bill UI (ingredient filters, quality/HP sliders), and drive work with a custom
+`WorkGiver_Scanner` that reads the bill stack and creates your own custom jobs. This is
+the pattern used by RepairableGear and is much more reliable.
 
-**Designator drag-select:** Must override `DrawStyleCategory => DrawStyleCategoryDefOf.FilledRectangle`. Without this, the drag rectangle doesn't render and multi-cell designation doesn't work properly.
+**WorkType binding:** Each bench type has its own `WorkGiverDef` with a specific `workType`
+(Crafting, Smithing, Tailoring). Bills on a bench are only processed by WorkGivers whose
+`fixedBillGiverDefs` includes that bench AND whose `workType` matches the pawn's work
+assignment.
 
-**Ingredient gathering:** Never consume materials remotely from the map. Use the vanilla queue pattern: WorkGiver finds stacks → populates `targetQueueB`/`countQueue` → JobDriver hauls to bench surface → consumes from `IngredientStackCells` after work. This is how `JobDriver_DoBill` handles it.
+**Vanilla smelting redundancy:** Vanilla's SmeltWeapon/SmeltApparel return a flat 25%
+ignoring all factors. Our recycling is strictly superior. Remove the vanilla recipes
+via XML patches to avoid player confusion.
 
-**Material costs should be deterministic:** Use `Mathf.CeilToInt` not `GenMath.RoundRandom` for costs. Players need to know exactly what's required. Probabilistic rounding is fine for returns (recycle products) but not for costs.
-
-**One cycle per job for repair:** Rather than multi-cycle within a single job, do one cycle per job attempt. The WorkGiver gathers fresh materials each time. This is simpler, avoids mid-job material shortages, and naturally handles interruptions — the designation persists until full HP.
-
-**Designation specificity:** Use `RemoveDesignation(specific)` not `RemoveAllDesignationsOn` — repair and clean can coexist on the same item.
-
-**Workbench routing:** `def.recipeMaker?.recipeUsers` for per-item routing. Revolver→machining, sword→smithy, jacket→tailor.
+**Dual-mode JobDrivers:** When a JobDriver serves both designations and bills, use
+`job.bill != null` to branch behavior: skip designation checks for bill jobs, call
+`bill.Notify_IterationCompleted` on completion for bill jobs.

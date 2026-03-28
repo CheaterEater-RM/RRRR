@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Defs>
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- DESIGNATION-BASED WORK                      -->
+  <!-- ═══════════════════════════════════════════ -->
+
   <WorkGiverDef>
     <defName>RRRR_Recycle</defName>
     <label>recycle designated items</label>
@@ -38,4 +42,19 @@
       <li>Manipulation</li>
     </requiredCapacities>
   </WorkGiverDef>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- BILL-BASED WORK                             -->
+  <!--                                             -->
+  <!-- Bill-based recycling and cleaning use        -->
+  <!-- vanilla's WorkGiver_DoBill + JobDriver_DoBill-->
+  <!-- pipeline with custom RecipeWorkers.          -->
+  <!--                                             -->
+  <!-- Vanilla's existing WorkGiverDefs for each   -->
+  <!-- bench type (DoBillsSmelter, DoBillsMake-     -->
+  <!-- Weapons, DoBillsMakeApparel) handle our      -->
+  <!-- RecipeDefs automatically. No additional      -->
+  <!-- WorkGiverDefs needed.                        -->
+  <!-- ═══════════════════════════════════════════ -->
+
 </Defs>
