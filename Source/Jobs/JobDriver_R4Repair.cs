@@ -8,6 +8,7 @@ namespace RRRR
 {
     /// <summary>
     /// Repair job using vanilla ingredient-gathering pattern.
+    /// Works for both designation-based and bill-based repair.
     /// 
     /// Target layout (matches vanilla DoBill):
     ///   TargetA = workbench (stable, never overwritten by queue extraction)
@@ -29,6 +30,7 @@ namespace RRRR
         private float cycleWorkTotal;
 
         private Thing Bench => job.GetTarget(BenchInd).Thing;
+        private bool IsBillDriven => job.bill != null;
 
         private Thing _cachedItem;
         private Thing RepairItem
@@ -72,12 +74,18 @@ namespace RRRR
         protected override IEnumerable<Toil> MakeNewToils()
         {
             this.FailOnDestroyedNullOrForbidden(BenchInd);
-            // Fail if item is gone or designation removed (player cancelled)
+
+            // Fail condition depends on bill vs designation
             this.FailOn(delegate
             {
                 Thing item = RepairItem;
                 if (item == null || item.Destroyed)
                     return true;
+
+                if (IsBillDriven)
+                    return job.bill.DeletedOrDereferenced || job.bill.suspended;
+
+                // Designation-driven: fail if designation removed
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Repair) == null)
                     return true;
                 return false;
@@ -244,6 +252,13 @@ namespace RRRR
                     Log.Message($"[R4] Repair complete: {item.LabelCap}");
                     RemoveRepairDesignation(item);
                 }
+
+                // Notify bill if bill-driven
+                if (IsBillDriven)
+                {
+                    var ingredients = new List<Thing> { item };
+                    job.bill.Notify_IterationCompleted(pawn, ingredients);
+                }
             };
 
             yield return finishToil;
@@ -264,27 +279,7 @@ namespace RRRR
 
             if (!item.Destroyed)
             {
-                int skillLevel = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-                float returnPct = MaterialUtility.CalculateReturnPercent(item, skillLevel) * 0.25f;
-
-                var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
-                if (costList != null)
-                {
-                    for (int i = 0; i < costList.Count; i++)
-                    {
-                        var entry = costList[i];
-                        if (entry.thingDef == null || entry.count <= 0 || entry.thingDef.intricate)
-                            continue;
-                        int count = GenMath.RoundRandom(entry.count * returnPct);
-                        if (count > 0)
-                        {
-                            Thing product = ThingMaker.MakeThing(entry.thingDef);
-                            product.stackCount = count;
-                            GenPlace.TryPlaceThing(product, pawn.Position, pawn.Map, ThingPlaceMode.Near);
-                        }
-                    }
-                }
-
+                MaterialUtility.SpawnPartialReclaim(item, pawn, 0.25f, pawn.Position, pawn.Map);
                 pawn.Map.designationManager.RemoveAllDesignationsOn(item);
                 item.Destroy(DestroyMode.Vanish);
             }

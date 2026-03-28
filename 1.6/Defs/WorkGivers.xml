@@ -44,17 +44,70 @@
   </WorkGiverDef>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- BILL-BASED WORK                             -->
+  <!-- BILL-BASED REPAIR                           -->
   <!--                                             -->
-  <!-- Bill-based recycling and cleaning use        -->
-  <!-- vanilla's WorkGiver_DoBill + JobDriver_DoBill-->
-  <!-- pipeline with custom RecipeWorkers.          -->
+  <!-- Custom WorkGiver creates RRRR_Repair jobs   -->
+  <!-- with proper material hauling. Recycle/clean  -->
+  <!-- bills use vanilla's WorkGiver_DoBill.        -->
   <!--                                             -->
-  <!-- Vanilla's existing WorkGiverDefs for each   -->
-  <!-- bench type (DoBillsSmelter, DoBillsMake-     -->
-  <!-- Weapons, DoBillsMakeApparel) handle our      -->
-  <!-- RecipeDefs automatically. No additional      -->
-  <!-- WorkGiverDefs needed.                        -->
+  <!-- workType must match the bench's vanilla      -->
+  <!-- workType so the right pawns do the work.     -->
   <!-- ═══════════════════════════════════════════ -->
+
+  <!-- Smithy: repair weapons (Smithing) -->
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Smithy</defName>
+    <label>repair items at smithy</label>
+    <giverClass>RRRR.WorkGiver_R4RepairBill</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>112</priorityInType>
+    <fixedBillGiverDefs>
+      <li>ElectricSmithy</li>
+      <li>FueledSmithy</li>
+    </fixedBillGiverDefs>
+    <verb>repair at</verb>
+    <gerund>repairing items at smithy</gerund>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
+
+  <!-- Machining table: repair weapons (Smithing — same as vanilla DoBillsMachiningTable) -->
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Machining</defName>
+    <label>repair items at machining table</label>
+    <giverClass>RRRR.WorkGiver_R4RepairBill</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>72</priorityInType>
+    <fixedBillGiverDefs>
+      <li>TableMachining</li>
+    </fixedBillGiverDefs>
+    <verb>repair at</verb>
+    <gerund>repairing items at machining table</gerund>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
+
+  <!-- Tailor bench: repair apparel (Tailoring) -->
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Tailor</defName>
+    <label>repair items at tailor bench</label>
+    <giverClass>RRRR.WorkGiver_R4RepairBill</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>107</priorityInType>
+    <fixedBillGiverDefs>
+      <li>ElectricTailoringBench</li>
+      <li>HandTailoringBench</li>
+    </fixedBillGiverDefs>
+    <verb>repair at</verb>
+    <gerund>repairing items at tailor bench</gerund>
+    <requiredCapacities>
+      <li>Manipulation</li>
+    </requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
 
 </Defs>

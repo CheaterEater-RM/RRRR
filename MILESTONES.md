@@ -14,37 +14,32 @@ Vanilla-compatible ingredient queue pattern using `JobDriver_DoBill.CollectIngre
 
 ## M4: Bill-Based Automation ✅
 
-**Architecture:** RecipeDefs provide the bill UI (filters, quality/HP sliders). A custom
-`WorkGiver_R4DoBill` scans bill stacks on specific benches, finds matching items, and
-creates our existing custom jobs (not vanilla's `JobDriver_DoBill`). This follows the
-pattern established by the RepairableGear reference mod.
+**Architecture:** RecipeDefs with custom `RecipeWorker` subclasses, processed by vanilla's
+`WorkGiver_DoBill` → `JobDriver_DoBill` pipeline. The item to process is the bill ingredient.
 
-**Key design:** RecipeDefs with empty `<products/>` and no `workerClass` — they're purely
-UI definitions. The WorkGiver checks `bill.IsFixedOrAllowedIngredient(t)` against items
-on the map, then creates our `RRRR_Recycle` or `RRRR_Clean` jobs.
+**RecipeWorkers:**
+- `RecipeWorker_R4Recycle` — spawns recycled materials (skill-based), destroys item
+- `RecipeWorker_R4Repair` — runs one repair cycle per bill iteration. Consumes repair
+  materials from map stacks. Minor mending (≥95% HP) is free. Item stays on bench;
+  if still damaged, the bill picks it up again.
+- `RecipeWorker_R4Clean` — removes taint, item stays on bench
 
-**Vanilla smelting override:** XML patches remove SmeltWeapon/SmeltApparel from the smelter.
-Our recycle bills replace them with HP/quality/skill-aware material returns.
+**RecipeDefs:**
+- `RRRR_RecycleWeapon` — smelter + smithy + machining
+- `RRRR_RecycleApparel` — smelter + tailor benches
+- `RRRR_RepairWeapon` — smithy + machining
+- `RRRR_RepairApparel` — tailor benches
+- `RRRR_CleanApparel` — tailor benches
 
-**WorkGiver binding via workType:**
-- Smelter + Machining → `Crafting` work type
-- Smithy → `Smithing` work type
-- Tailor benches → `Tailoring` work type
+**Vanilla smelting override:** SmeltWeapon/SmeltApparel removed from smelter via XML patches.
 
-**JobDrivers updated:** Both `JobDriver_R4Recycle` and `JobDriver_R4Clean` now handle
-bill-driven jobs alongside designation-driven jobs. Bill jobs skip designation checks
-and call `bill.Notify_IterationCompleted` on completion.
+**Repair bill design:** The damaged item is the bill ingredient. The RecipeWorker handles
+material consumption from map stacks (not bill ingredients), skill checks, failure
+mechanics, and destruction. The bill's quality/HP filters let players control which
+items get repaired (e.g. "only repair items above Normal quality").
 
-**Minor mending (≥95% HP = free repair):** Integrated into `WorkGiver_R4Repair` —
-skips material finding when item HP is at or above 95%.
-
-**Files:**
-- `WorkGiver_R4DoBill.cs` — custom WorkGiver that scans bill stacks
-- `WorkGivers.xml` — 4 new bill-based WorkGiverDefs (smelter, smithy, machining, tailor)
-- `Recipes.xml` — 3 RecipeDefs with empty products
-- `VanillaSmelting.xml` — patches removing SmeltWeapon/SmeltApparel from smelter
-- `JobDriver_R4Recycle.cs` — updated for bill support
-- `JobDriver_R4Clean.cs` — updated for bill support
+**Minor mending in bills:** Items at ≥95% HP are repaired without material consumption,
+same threshold as designation-based repair.
 
 ---
 
@@ -56,27 +51,23 @@ skips material finding when item HP is at or above 95%.
 - [ ] README.md, Steam Workshop assets
 - [ ] Compatibility testing (CE, VE, etc.)
 - [ ] Performance profiling
-- [ ] Minor mending polish (messaging, designator tooltip)
 
 ---
 
 ## Lessons Learned
 
-**Bill system architecture:** Don't try to use vanilla's `JobDriver_DoBill` with custom
-`RecipeWorker` overrides — it's fragile and hard to debug. Instead, use RecipeDefs purely
-for the bill UI (ingredient filters, quality/HP sliders), and drive work with a custom
-`WorkGiver_Scanner` that reads the bill stack and creates your own custom jobs. This is
-the pattern used by RepairableGear and is much more reliable.
+**SpecialThingFilterDefs are global:** `allowedByDefault=false` with a broad `parentCategory`
+blocks items from ALL ThingFilters in the game. Never use `parentCategory=Root` with
+`allowedByDefault=false` unless you intend to affect every bill, stockpile, and filter.
 
-**WorkType binding:** Each bench type has its own `WorkGiverDef` with a specific `workType`
-(Crafting, Smithing, Tailoring). Bills on a bench are only processed by WorkGivers whose
-`fixedBillGiverDefs` includes that bench AND whose `workType` matches the pawn's work
-assignment.
+**Vanilla bill pipeline works:** Use RecipeDefs with custom `RecipeWorker` subclasses.
+Override `ConsumeIngredient` to prevent destruction, `Notify_IterationCompleted` for custom
+logic (has pawn reference for skill). Vanilla's `WorkGiver_DoBill` handles ingredient
+finding and job creation automatically.
 
-**Vanilla smelting redundancy:** Vanilla's SmeltWeapon/SmeltApparel return a flat 25%
-ignoring all factors. Our recycling is strictly superior. Remove the vanilla recipes
-via XML patches to avoid player confusion.
+**PatchOperation success values:** Valid values are `Normal`, `Invert`, `Always`, `Never`.
+NOT `Maybe`. Use `Always` for "don't fail if target not found".
 
-**Dual-mode JobDrivers:** When a JobDriver serves both designations and bills, use
-`job.bill != null` to branch behavior: skip designation checks for bill jobs, call
-`bill.Notify_IterationCompleted` on completion for bill jobs.
+**Repair in vanilla bill system:** The item is the ingredient. Additional repair materials
+are consumed from map stacks in `Notify_IterationCompleted`, not as bill ingredients.
+One cycle per bill iteration. If still damaged, the bill picks it up again automatically.

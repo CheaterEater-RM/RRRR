@@ -2,21 +2,17 @@
 <!--
   R4 Recipe Definitions — Bill-based automation
   
-  These use vanilla's JobDriver_DoBill pipeline with custom RecipeWorkers.
-  The item to process IS the ingredient.
+  RECYCLE + CLEAN: Use vanilla's WorkGiver_DoBill + JobDriver_DoBill with custom
+  RecipeWorkers. The item IS the ingredient; RecipeWorker handles the logic.
   
-  workerClass overrides ConsumeIngredient (don't destroy) and
-  Notify_IterationCompleted (spawn products / modify item using pawn skill).
-  
-  This means bills work through EITHER:
-  - Vanilla's WorkGiver_DoBill → JobDriver_DoBill → RecipeWorker (standard path)
-  - Our WorkGiver_R4DoBill → our custom JobDrivers (custom path, handles edge cases)
-  Both paths produce correct results.
+  REPAIR: Uses our custom WorkGiver_R4RepairBill which creates RRRR_Repair jobs
+  with proper material hauling via CollectIngredientsToils. The requiredGiverWorkType
+  is set to prevent vanilla's WorkGiver_DoBill from also processing repair bills.
 -->
 <Defs>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- RECYCLE BILLS                               -->
+  <!-- RECYCLE BILLS (vanilla DoBill pipeline)     -->
   <!-- ═══════════════════════════════════════════ -->
 
   <RecipeDef>
@@ -87,7 +83,86 @@
   </RecipeDef>
 
   <!-- ═══════════════════════════════════════════ -->
-  <!-- CLEAN BILLS                                 -->
+  <!-- REPAIR BILLS (custom WorkGiver pipeline)    -->
+  <!--                                             -->
+  <!-- requiredGiverWorkType prevents vanilla's    -->
+  <!-- WorkGiver_DoBill from processing these.     -->
+  <!-- Our WorkGiver_R4RepairBill handles them     -->
+  <!-- and creates RRRR_Repair jobs with proper    -->
+  <!-- ingredient hauling.                         -->
+  <!-- ═══════════════════════════════════════════ -->
+
+  <RecipeDef>
+    <defName>RRRR_RepairWeapon</defName>
+    <label>repair weapon</label>
+    <description>Repair a damaged weapon. Each cycle restores HP based on skill, consuming materials hauled to the bench. Items with minor damage (≤5%) are mended for free.</description>
+    <jobString>Repairing weapon.</jobString>
+    <workAmount>800</workAmount>
+    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
+    <workSkill>Crafting</workSkill>
+    <effectWorking>Smith</effectWorking>
+    <soundWorking>Recipe_Smith</soundWorking>
+    <workerClass>RRRR.RecipeWorker_R4Repair</workerClass>
+    <!-- Block vanilla WorkGiver_DoBill: smithy uses Smithing, not Crafting -->
+    <requiredGiverWorkType>Crafting</requiredGiverWorkType>
+    <ingredients>
+      <li>
+        <filter>
+          <categories>
+            <li>Weapons</li>
+          </categories>
+        </filter>
+        <count>1</count>
+      </li>
+    </ingredients>
+    <fixedIngredientFilter>
+      <categories>
+        <li>Weapons</li>
+      </categories>
+    </fixedIngredientFilter>
+    <recipeUsers>
+      <li>ElectricSmithy</li>
+      <li>FueledSmithy</li>
+      <li>TableMachining</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <RecipeDef>
+    <defName>RRRR_RepairApparel</defName>
+    <label>repair apparel</label>
+    <description>Repair damaged apparel. Each cycle restores HP based on skill, consuming materials hauled to the bench. Items with minor damage (≤5%) are mended for free.</description>
+    <jobString>Repairing apparel.</jobString>
+    <workAmount>800</workAmount>
+    <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
+    <workSkill>Crafting</workSkill>
+    <effectWorking>Tailor</effectWorking>
+    <soundWorking>Recipe_Tailor</soundWorking>
+    <workerClass>RRRR.RecipeWorker_R4Repair</workerClass>
+    <!-- Block vanilla WorkGiver_DoBill: tailor uses Tailoring, not Crafting -->
+    <requiredGiverWorkType>Crafting</requiredGiverWorkType>
+    <ingredients>
+      <li>
+        <filter>
+          <categories>
+            <li>Apparel</li>
+          </categories>
+        </filter>
+        <count>1</count>
+      </li>
+    </ingredients>
+    <fixedIngredientFilter>
+      <categories>
+        <li>Apparel</li>
+      </categories>
+    </fixedIngredientFilter>
+    <recipeUsers>
+      <li>ElectricTailoringBench</li>
+      <li>HandTailoringBench</li>
+    </recipeUsers>
+  </RecipeDef>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- CLEAN BILLS (vanilla DoBill pipeline)       -->
   <!-- ═══════════════════════════════════════════ -->
 
   <RecipeDef>

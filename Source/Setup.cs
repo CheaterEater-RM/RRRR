@@ -28,6 +28,8 @@ namespace RRRR
             // Verify bill recipes
             VerifyDef<RecipeDef>("RRRR_RecycleWeapon");
             VerifyDef<RecipeDef>("RRRR_RecycleApparel");
+            VerifyDef<RecipeDef>("RRRR_RepairWeapon");
+            VerifyDef<RecipeDef>("RRRR_RepairApparel");
             VerifyDef<RecipeDef>("RRRR_CleanApparel");
 
             Log.Message("[R4] Building ThingDef cache...");

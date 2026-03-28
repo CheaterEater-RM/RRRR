@@ -22,6 +22,42 @@ namespace RRRR
         };
 
         // ================================================================
+        // SAFE THING SPAWNING
+        // ================================================================
+
+        /// <summary>
+        /// Safely create a Thing from a ThingDef, guarding against MadeFromStuff
+        /// defs that require a stuff parameter. Returns null if the def can't be
+        /// safely instantiated as a raw material.
+        /// </summary>
+        private static Thing TryMakeProduct(ThingDef def, int count)
+        {
+            if (def == null || count <= 0)
+                return null;
+            if (def.MadeFromStuff)
+                return null;
+
+            Thing product = ThingMaker.MakeThing(def);
+            product.stackCount = count;
+            return product;
+        }
+
+        /// <summary>
+        /// Attempt to place a product thing on the map. Destroys the thing if
+        /// placement fails to prevent orphaned objects.
+        /// Returns true if placed successfully.
+        /// </summary>
+        private static bool TryPlaceOrDestroy(Thing product, IntVec3 pos, Map map)
+        {
+            if (product == null)
+                return false;
+            if (GenPlace.TryPlaceThing(product, pos, map, ThingPlaceMode.Near))
+                return true;
+            product.Destroy();
+            return false;
+        }
+
+        // ================================================================
         // RECYCLE
         // ================================================================
 
@@ -57,14 +93,11 @@ namespace RRRR
                     materialPct *= settings.recycleGlobalMult;
 
                     int count = GenMath.RoundRandom(entry.count * materialPct);
-                    if (count > 0)
+                    Thing product = TryMakeProduct(entry.thingDef, count);
+                    if (product != null)
                     {
-                        Thing product = ThingMaker.MakeThing(entry.thingDef);
-                        product.stackCount = count;
-                        if (GenPlace.TryPlaceThing(product, spawnPos, map, ThingPlaceMode.Near))
+                        if (TryPlaceOrDestroy(product, spawnPos, map))
                             results.Add(product);
-                        else
-                            product.Destroy();
                     }
                 }
             }
@@ -74,28 +107,28 @@ namespace RRRR
                 for (int i = 0; i < thing.def.smeltProducts.Count; i++)
                 {
                     var entry = thing.def.smeltProducts[i];
-                    if (entry.thingDef == null || entry.count <= 0)
-                        continue;
-                    Thing product = ThingMaker.MakeThing(entry.thingDef);
-                    product.stackCount = entry.count;
-                    if (GenPlace.TryPlaceThing(product, spawnPos, map, ThingPlaceMode.Near))
-                        results.Add(product);
-                    else
-                        product.Destroy();
+                    Thing product = TryMakeProduct(entry.thingDef, entry.count);
+                    if (product != null)
+                    {
+                        if (TryPlaceOrDestroy(product, spawnPos, map))
+                            results.Add(product);
+                    }
                 }
             }
 
             if (results.Count == 0 && costList != null && costList.Count > 0)
             {
-                var fallback = costList[0];
-                if (fallback.thingDef != null && !fallback.thingDef.intricate)
+                for (int i = 0; i < costList.Count; i++)
                 {
-                    Thing product = ThingMaker.MakeThing(fallback.thingDef);
-                    product.stackCount = 1;
-                    if (GenPlace.TryPlaceThing(product, spawnPos, map, ThingPlaceMode.Near))
-                        results.Add(product);
-                    else
-                        product.Destroy();
+                    var fallback = costList[i];
+                    if (fallback.thingDef != null && !fallback.thingDef.intricate && !fallback.thingDef.MadeFromStuff)
+                    {
+                        Thing product = ThingMaker.MakeThing(fallback.thingDef);
+                        product.stackCount = 1;
+                        if (TryPlaceOrDestroy(product, spawnPos, map))
+                            results.Add(product);
+                        break;
+                    }
                 }
             }
 
@@ -103,28 +136,45 @@ namespace RRRR
         }
 
         // ================================================================
-        // REPAIR MATERIAL COSTS
+        // PARTIAL MATERIAL RECLAIM (used on repair destruction)
         // ================================================================
 
         /// <summary>
-        /// Calculate what materials one repair cycle costs.
-        /// Each cycle repairs 20% maxHP (5 cycles to full), costs 10% of base materials × techDifficulty.
-        ///
-        /// Intricate components (IC, AC, etc.):
-        ///   - Skip entirely if the recipe uses ≤ 2 (too rare to charge per cycle).
-        ///   - Otherwise floor(count × fraction), minimum 1.
-        ///
-        /// Everything else (steel, plasteel, cloth…):
-        ///   - Skip if 5 cycles would cost ≥ the full recipe amount
-        ///     (ensures repair is cheaper than crafting new).
-        ///   - Otherwise ceil(count × fraction) — always ≥ 1 by construction.
+        /// Spawn partial materials from a destroyed item, scaled by return percent.
+        /// Used when repair failure destroys the item.
         /// </summary>
+        public static void SpawnPartialReclaim(Thing item, Pawn worker, float reclaimFactor, IntVec3 spawnPos, Map map)
+        {
+            int skillLevel = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+            float returnPct = CalculateReturnPercent(item, skillLevel) * reclaimFactor;
+
+            var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
+            if (costList == null)
+                return;
+
+            for (int i = 0; i < costList.Count; i++)
+            {
+                var entry = costList[i];
+                if (entry.thingDef == null || entry.count <= 0 || entry.thingDef.intricate)
+                    continue;
+
+                int count = GenMath.RoundRandom(entry.count * returnPct);
+                Thing product = TryMakeProduct(entry.thingDef, count);
+                if (product != null)
+                    TryPlaceOrDestroy(product, spawnPos, map);
+            }
+        }
+
+        // ================================================================
+        // REPAIR MATERIAL COSTS
+        // ================================================================
+
         public static List<ThingDefCountClass> GetRepairCycleCost(Thing item)
         {
             var costs = new List<ThingDefCountClass>();
             float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
             float cycleFraction = 0.10f * techDifficulty;
-            const int cyclesNeeded = 5; // 100% HP / 20% per cycle
+            const int cyclesNeeded = 5;
 
             var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
             if (costList == null)
@@ -139,18 +189,16 @@ namespace RRRR
                 int count;
                 if (entry.thingDef.intricate)
                 {
-                    // Skip if recipe uses ≤ 2 — too few to meaningfully charge per cycle
                     if (entry.count <= 2)
                         continue;
                     count = Mathf.Max(1, Mathf.FloorToInt(entry.count * cycleFraction));
                 }
                 else
                 {
-                    // Skip if total cost over all cycles would reach or exceed crafting from scratch
                     int ceilCost = Mathf.CeilToInt(entry.count * cycleFraction);
                     if (ceilCost * cyclesNeeded >= entry.count)
                         continue;
-                    count = ceilCost; // ≥ 1 when cycleFraction > 0 (techDifficulty always positive)
+                    count = ceilCost;
                 }
 
                 costs.Add(new ThingDefCountClass(entry.thingDef, count));
@@ -163,10 +211,6 @@ namespace RRRR
         // CLEAN MATERIAL COSTS
         // ================================================================
 
-        /// <summary>
-        /// Calculate the material cost for cleaning taint.
-        /// 25% of base materials (non-intricate only). Deterministic with ceiling.
-        /// </summary>
         public static List<ThingDefCountClass> GetCleanCost(Thing item)
         {
             var costs = new List<ThingDefCountClass>();
@@ -207,11 +251,6 @@ namespace RRRR
         // INGREDIENT FINDING (used by WorkGivers)
         // ================================================================
 
-        /// <summary>
-        /// Find material stacks on the map for the given cost list.
-        /// Returns true if all materials can be satisfied, populating
-        /// foundThings and foundCounts for use with job.targetQueueB/countQueue.
-        /// </summary>
         public static bool TryFindIngredients(
             List<ThingDefCountClass> costs,
             Pawn pawn,
@@ -222,7 +261,7 @@ namespace RRRR
             foundCounts = new List<int>();
 
             if (costs == null || costs.Count == 0)
-                return true; // No cost = always succeeds
+                return true;
 
             Map map = pawn.Map;
 
@@ -235,7 +274,6 @@ namespace RRRR
                 if (available == null)
                     return false;
 
-                // Sort by distance to pawn for efficient gathering
                 var sorted = new List<Thing>(available);
                 sorted.Sort((a, b) =>
                     a.Position.DistanceToSquared(pawn.Position)
@@ -258,16 +296,12 @@ namespace RRRR
                 }
 
                 if (remaining > 0)
-                    return false; // Can't satisfy this material
+                    return false;
             }
 
             return true;
         }
 
-        /// <summary>
-        /// Consume all things on the bench's ingredient cells.
-        /// Called after work is complete.
-        /// </summary>
         public static void ConsumeIngredientsOnBench(Thing bench, Map map)
         {
             if (!(bench is IBillGiver billGiver))
@@ -280,9 +314,7 @@ namespace RRRR
                 {
                     Thing t = things[i];
                     if (t.def.category == ThingCategory.Item && t != bench)
-                    {
                         t.Destroy();
-                    }
                 }
             }
         }
