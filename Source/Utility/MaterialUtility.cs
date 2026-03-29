@@ -72,6 +72,20 @@ namespace RRRR
             return Mathf.Clamp(workToMake * 0.15f, 400f, 2000f);
         }
 
+        /// <summary>
+        /// Final per-material return fraction, incorporating base return, rare-material
+        /// penalties, and the global multiplier.  Used by both DoRecycleProducts and
+        /// the tooltip builder so that what the UI shows matches what spawns.
+        /// </summary>
+        public static float GetMaterialReturnPct(ThingDef materialDef, float baseReturnPct)
+        {
+            float pct = baseReturnPct;
+            if (RareMaterialPenalties.TryGetValue(materialDef.defName, out float penalty))
+                pct *= penalty;
+            pct *= RRRR_Mod.Settings.recycleGlobalMult;
+            return pct;
+        }
+
         public static List<Thing> DoRecycleProducts(Thing thing, Pawn worker, IntVec3 spawnPos, Map map)
         {
             var results     = new List<Thing>();
@@ -88,10 +102,7 @@ namespace RRRR
                     if (entry.thingDef == null || entry.count <= 0) continue;
                     if (settings.skipIntricateComponents && entry.thingDef.intricate) continue;
 
-                    float materialPct = returnPct;
-                    if (RareMaterialPenalties.TryGetValue(entry.thingDef.defName, out float penalty))
-                        materialPct *= penalty;
-                    materialPct *= settings.recycleGlobalMult;
+                    float materialPct = GetMaterialReturnPct(entry.thingDef, returnPct);
 
                     int count = GenMath.RoundRandom(entry.count * materialPct);
                     Thing product = TryMakeProduct(entry.thingDef, count);

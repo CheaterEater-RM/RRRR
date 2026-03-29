@@ -208,7 +208,8 @@ namespace RRRR
                     var entry = costList[i];
                     if (entry.thingDef == null || entry.count <= 0) continue;
                     if (RRRR_Mod.Settings.skipIntricateComponents && entry.thingDef.intricate) continue;
-                    int count = Mathf.RoundToInt(entry.count * returnPct * RRRR_Mod.Settings.recycleGlobalMult);
+                    float materialPct = MaterialUtility.GetMaterialReturnPct(entry.thingDef, returnPct);
+                    int count = Mathf.RoundToInt(entry.count * materialPct);
                     sb.AppendLine($"  {entry.thingDef.LabelCap}: ~{count}");
                 }
             }
