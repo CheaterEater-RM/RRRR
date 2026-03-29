@@ -69,7 +69,8 @@ namespace RRRR
 
                 if (Rand.Chance(successChance))
                 {
-                    int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * 0.20f));
+                    float hpFraction = RRRR_Mod.Settings.repairHpPerCycle;
+                    int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * hpFraction));
                     item.HitPoints = Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);
                 }
                 else
