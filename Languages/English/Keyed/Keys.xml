@@ -61,8 +61,15 @@
   <R4_Settings_RecycleHeader>Recycle Settings</R4_Settings_RecycleHeader>
   <R4_Settings_RecycleMult>Material return multiplier</R4_Settings_RecycleMult>
   <R4_Settings_SkipIntricate>Skip intricate components</R4_Settings_SkipIntricate>
-  <R4_Settings_SkipIntricate_Tip>If enabled, components and advanced components are not returned when recycling.</R4_Settings_SkipIntricate_Tip>
+  <R4_Settings_SkipIntricate_Tip>If enabled, intricate components are excluded from recycle returns.</R4_Settings_SkipIntricate_Tip>
+
   <R4_Settings_RepairHeader>Repair Settings</R4_Settings_RepairHeader>
-  <R4_Settings_RepairTechDifficulty>Tech difficulty multiplier</R4_Settings_RepairTechDifficulty>
+  <R4_Settings_RepairHpPerCycle>HP restored per cycle</R4_Settings_RepairHpPerCycle>
+  <R4_Settings_RepairCyclesNote>{0} cycles to fully repair</R4_Settings_RepairCyclesNote>
+  <R4_Settings_RepairTechDiffMult>Tech difficulty multiplier</R4_Settings_RepairTechDiffMult>
+
+  <R4_Settings_CleanHeader>Clean Settings</R4_Settings_CleanHeader>
+  <R4_Settings_CleanCostFraction>Material cost (fraction of make cost)</R4_Settings_CleanCostFraction>
+
   <R4_Settings_Reset>Reset to defaults</R4_Settings_Reset>
 </LanguageData>

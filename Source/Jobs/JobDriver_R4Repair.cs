@@ -15,6 +15,9 @@ namespace RRRR
     ///   TargetQueueA  = [item to repair]
     ///   TargetQueueB  = ingredient stacks
     ///   TargetC       = ingredient placement cell
+    ///
+    /// HP restored per cycle is driven by RRRR_Mod.Settings.repairHpPerCycle
+    /// so it matches the cost formula in MaterialUtility.
     /// </summary>
     public class JobDriver_R4Repair : JobDriver
     {
@@ -49,7 +52,6 @@ namespace RRRR
         {
             Thing item  = RepairItem;
             Thing bench = Bench;
-            // Explicit string locals avoid CS8957 (TaggedString vs string ternary)
             string itemLabel  = item  != null ? item.LabelShort  : "unknown".Translate().ToString();
             string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
             return "R4_JobReport_Repair".Translate(itemLabel, benchLabel);
@@ -132,7 +134,7 @@ namespace RRRR
                 if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 if (pawn.carryTracker.CarriedThing == null)
                 {
-                    int count = UnityEngine.Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
+                    int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
                     if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
                         EndJobWith(JobCondition.Incompletable);
                 }
@@ -168,7 +170,8 @@ namespace RRRR
                 }
                 float baseWork = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
                 if (baseWork <= 0f) baseWork = 1000f;
-                cycleWorkTotal = UnityEngine.Mathf.Clamp(baseWork * 0.05f, 200f, 800f);
+                // Work per cycle scales with item complexity but is independent of HP setting
+                cycleWorkTotal = Mathf.Clamp(baseWork * 0.05f, 200f, 800f);
                 if (cycleWorkLeft <= 0f) cycleWorkLeft = cycleWorkTotal;
             };
 
@@ -206,8 +209,11 @@ namespace RRRR
 
                 if (Rand.Chance(successChance))
                 {
-                    int cycleHP = UnityEngine.Mathf.Max(1, UnityEngine.Mathf.RoundToInt(item.MaxHitPoints * 0.20f));
-                    item.HitPoints = UnityEngine.Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);
+                    // HP restored per cycle comes from the setting, keeping behaviour
+                    // in sync with the cost formula in MaterialUtility.
+                    float hpFraction = RRRR_Mod.Settings.repairHpPerCycle;
+                    int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * hpFraction));
+                    item.HitPoints = Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);
                 }
                 else
                 {

@@ -9,10 +9,28 @@ namespace RRRR
     /// <summary>
     /// All material cost and return calculations for recycling, repair, and cleaning.
     /// Also provides ingredient-finding helpers for the WorkGivers.
+    ///
+    /// Cost formulas use RRRR_Mod.Settings-derived divisors rather than
+    /// hardcoded numbers, so player configuration flows through correctly.
+    /// See RRRR_Settings for the derived property definitions.
     /// </summary>
     public static class MaterialUtility
     {
-        private static readonly float[] QualityMultipliers = { 0.60f, 0.70f, 0.80f, 0.90f, 1.00f, 1.10f, 1.20f };
+        // Quality scores [0,1] fed into the sigmoid weighted sum.
+        // Awful(0)=0.0 … Legendary(6)=1.0; Normal sits at 0.35 so that
+        // skill-10 + Normal + full HP lands on the sigmoid midpoint (~50% return).
+        private static readonly float[] QualityScores = { 0.00f, 0.15f, 0.35f, 0.55f, 0.70f, 0.85f, 1.00f };
+
+        // ── Sigmoid recycle parameters ────────────────────────────────────────
+        // Weighted score: x = WeightSkill*s + WeightHP*h + WeightQuality*q  (each factor ∈ [0,1])
+        // sigmoid output renormalised so x=0 → MinReturn, x=1 → 1.0
+        private const float WeightSkill   = 0.35f;
+        private const float WeightHP      = 0.40f;
+        private const float WeightQuality = 0.25f;
+        private const float SigmoidK      = 7f;    // steepness
+        private const float SigmoidX0     = 0.70f; // midpoint — maps to ~50% return
+        private const float MinReturn     = 0.05f; // floor
+        private const float TaintMult     = 0.60f; // flat post-sigmoid taint penalty
 
         private static readonly Dictionary<string, float> RareMaterialPenalties = new Dictionary<string, float>
         {
@@ -56,10 +74,10 @@ namespace RRRR
 
         public static List<Thing> DoRecycleProducts(Thing thing, Pawn worker, IntVec3 spawnPos, Map map)
         {
-            var results    = new List<Thing>();
-            int skillLevel = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+            var results     = new List<Thing>();
+            int skillLevel  = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
             float returnPct = CalculateReturnPercent(thing, skillLevel);
-            var settings   = RRRR_Mod.Settings;
+            var settings    = RRRR_Mod.Settings;
 
             var costList = thing.def.CostListAdjusted(thing.Stuff, errorOnNullStuff: false);
             if (costList != null)
@@ -141,36 +159,47 @@ namespace RRRR
         // REPAIR MATERIAL COSTS
         // ================================================================
 
+        /// <summary>
+        /// Cost of one repair cycle per material.
+        ///
+        /// Formula per material:
+        ///   divisor      = Settings.RepairCostDivisor  (= RepairCyclesFull * 2)
+        ///   costPerCycle = Ceiling(baseCost / divisor)
+        ///   Include only if costPerCycle * RepairCyclesFull &lt; baseCost
+        ///     (total repair cost strictly less than making the item new)
+        ///
+        /// At default settings (20% HP/cycle → 5 cycles, divisor = 10):
+        ///   6 steel:       Ceiling(6/10)=1,  1*5=5  &lt; 6  → 1/cycle
+        ///   5 steel:       Ceiling(5/10)=1,  1*5=5  &lt; 5? No → fallback
+        ///   60 steel:      Ceiling(60/10)=6, 6*5=30 &lt; 60 → 6/cycle
+        ///   3 components:  Ceiling(3/10)=1,  1*5=5  &lt; 3? No → fallback candidate
+        ///   60 steel + 3 components: steel passes, components excluded — no fallback needed
+        ///
+        /// Fallback: if nothing passes, use 1 unit of the highest-count material.
+        /// </summary>
         public static List<ThingDefCountClass> GetRepairCycleCost(Thing item)
         {
-            var costs = new List<ThingDefCountClass>();
-            float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
-            float cycleFraction  = 0.10f * techDifficulty;
-            const int cyclesNeeded = 5;
-
+            var costs    = new List<ThingDefCountClass>();
             var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
             if (costList == null) return costs;
+
+            var settings   = RRRR_Mod.Settings;
+            int divisor    = settings.RepairCostDivisor;
+            int cyclesFull = settings.RepairCyclesFull;
 
             for (int i = 0; i < costList.Count; i++)
             {
                 var entry = costList[i];
                 if (entry.thingDef == null || entry.count <= 0) continue;
 
-                int count;
-                if (entry.thingDef.intricate)
-                {
-                    if (entry.count <= 2) continue;
-                    count = Mathf.Max(1, Mathf.FloorToInt(entry.count * cycleFraction));
-                }
-                else
-                {
-                    int ceilCost = Mathf.CeilToInt(entry.count * cycleFraction);
-                    if (ceilCost * cyclesNeeded >= entry.count) continue;
-                    count = ceilCost;
-                }
-
-                costs.Add(new ThingDefCountClass(entry.thingDef, count));
+                int costPerCycle = Mathf.CeilToInt((float)entry.count / divisor);
+                if (costPerCycle * cyclesFull < entry.count)
+                    costs.Add(new ThingDefCountClass(entry.thingDef, costPerCycle));
             }
+
+            // Fallback: nothing qualified — use 1 of the highest-count material
+            if (costs.Count == 0)
+                AddFallback(costList, costs);
 
             return costs;
         }
@@ -179,35 +208,64 @@ namespace RRRR
         // CLEAN MATERIAL COSTS
         // ================================================================
 
+        /// <summary>
+        /// Cost of a single cleaning operation.
+        ///
+        /// Same structure as repair, but uses Settings.CleanCostDivisor
+        /// (= Round(1 / cleanCostFraction)) instead of RepairCostDivisor.
+        /// At default 20% clean fraction: divisor = 5, same as one repair cycle.
+        ///
+        /// The "include only if costPerCycle * 5 &lt; baseCost" guard uses
+        /// RepairCyclesFull so the threshold is consistent with repair.
+        /// Fallback: 1 of the highest-count material if nothing passes.
+        /// </summary>
         public static List<ThingDefCountClass> GetCleanCost(Thing item)
         {
             var costs    = new List<ThingDefCountClass>();
             var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
             if (costList == null) return costs;
 
+            var settings   = RRRR_Mod.Settings;
+            int divisor    = settings.CleanCostDivisor;
+            int cyclesFull = settings.RepairCyclesFull; // threshold consistent with repair
+
             for (int i = 0; i < costList.Count; i++)
             {
                 var entry = costList[i];
-                if (entry.thingDef == null || entry.count <= 0 || entry.thingDef.intricate) continue;
+                if (entry.thingDef == null || entry.count <= 0) continue;
 
-                int count = Mathf.CeilToInt(entry.count * 0.25f);
-                if (count > 0)
-                    costs.Add(new ThingDefCountClass(entry.thingDef, count));
+                int costPerOp = Mathf.CeilToInt((float)entry.count / divisor);
+                if (costPerOp * cyclesFull < entry.count)
+                    costs.Add(new ThingDefCountClass(entry.thingDef, costPerOp));
             }
 
-            if (costs.Count == 0 && costList.Count > 0)
-            {
-                for (int i = 0; i < costList.Count; i++)
-                {
-                    if (costList[i].thingDef != null && !costList[i].thingDef.intricate)
-                    {
-                        costs.Add(new ThingDefCountClass(costList[i].thingDef, 1));
-                        break;
-                    }
-                }
-            }
+            // Fallback: nothing qualified — use 1 of the highest-count material
+            if (costs.Count == 0)
+                AddFallback(costList, costs);
 
             return costs;
+        }
+
+        // ================================================================
+        // SHARED COST HELPERS
+        // ================================================================
+
+        /// <summary>
+        /// Appends 1 unit of the highest-count material in costList to costs.
+        /// Used as a fallback when no material passes the cost threshold.
+        /// </summary>
+        private static void AddFallback(List<ThingDefCountClass> costList, List<ThingDefCountClass> costs)
+        {
+            ThingDefCountClass best = null;
+            for (int i = 0; i < costList.Count; i++)
+            {
+                var entry = costList[i];
+                if (entry.thingDef == null || entry.count <= 0) continue;
+                if (best == null || entry.count > best.count)
+                    best = entry;
+            }
+            if (best != null)
+                costs.Add(new ThingDefCountClass(best.thingDef, 1));
         }
 
         // ================================================================
@@ -217,10 +275,6 @@ namespace RRRR
         /// <summary>
         /// Find and reserve ingredients for repair/clean within a search radius
         /// from the given origin (typically the bench position).
-        ///
-        /// Respects ingredientSearchRadius to match vanilla bill behaviour and
-        /// avoid full-map scans. Sorts candidates by distance to the origin so
-        /// the closest materials to the bench are consumed first.
         /// </summary>
         public static bool TryFindIngredients(
             List<ThingDefCountClass> costs,
@@ -236,9 +290,9 @@ namespace RRRR
             if (costs == null || costs.Count == 0)
                 return true;
 
-            Map  map      = pawn.Map;
-            bool useRadius = searchRadius > 0f && searchRadius < 9999f;
-            float radiusSq = searchRadius * searchRadius;
+            Map   map      = pawn.Map;
+            bool  useRadius = searchRadius > 0f && searchRadius < 9999f;
+            float radiusSq  = searchRadius * searchRadius;
 
             for (int i = 0; i < costs.Count; i++)
             {
@@ -249,9 +303,6 @@ namespace RRRR
                 if (available == null || available.Count == 0)
                     return false;
 
-                // Build radius-filtered, sorted candidate list for this material.
-                // Sorting allocates a list but only runs when materials are actually
-                // present on the map, and only for the small set matching this def.
                 var sorted = new List<Thing>(available.Count);
                 for (int j = 0; j < available.Count; j++)
                 {
@@ -261,7 +312,6 @@ namespace RRRR
                     sorted.Add(t);
                 }
 
-                // Sort by distance to origin (bench position), matching vanilla logic
                 sorted.Sort((a, b) =>
                     (a.Position - searchOrigin).LengthHorizontalSquared
                     .CompareTo((b.Position - searchOrigin).LengthHorizontalSquared));
@@ -287,10 +337,7 @@ namespace RRRR
         }
 
         /// <summary>
-        /// Overload with no radius restriction — used by designation-based WorkGivers
-        /// which call this only after a bench has already been confirmed reachable.
-        /// The bench's proximity naturally limits how far materials are expected.
-        /// Uses pawn position as origin for closest-first ordering.
+        /// Overload with no radius restriction — uses pawn position as origin.
         /// </summary>
         public static bool TryFindIngredients(
             List<ThingDefCountClass> costs,
@@ -326,40 +373,57 @@ namespace RRRR
         // RETURN PERCENT CALCULATION
         // ================================================================
 
+        /// <summary>
+        /// Returns the fraction of make-cost materials to yield when recycling.
+        ///
+        /// Algorithm:
+        ///   1. Normalise skill, HP, and quality each to [0,1].
+        ///   2. Combine into a single score:  x = ws·s + wh·h + wq·q
+        ///   3. Pass through a logistic sigmoid:  σ(x) = 1 / (1 + e^{−k(x−x₀)})
+        ///   4. Renormalise so σ(0)→MinReturn and σ(1)→1.0, giving strict endpoints.
+        ///   5. Apply taint as a flat post-sigmoid multiplier, floored at MinReturn.
+        ///
+        /// Key reference points (defaults):
+        ///   Skill 20, Legendary, HP 100 % → 100 %
+        ///   Skill 10, Normal,    HP 100 % → ~51 %
+        ///   Skill  0, Awful,     HP   0 % → ~5 %
+        ///   Taint (×0.60) at full-HP Normal ≈ clean cost, so cleaning before
+        ///   recycling is roughly break-even; for damaged items it is never worth it.
+        /// </summary>
         public static float CalculateReturnPercent(Thing thing, int skillLevel)
         {
-            return ConditionFactor(thing) * QualityFactor(thing) * SkillFactor(skillLevel) * TaintFactor(thing);
-        }
+            // 1 — normalised inputs
+            float s = Mathf.Clamp01(skillLevel / 20f);
 
-        private static float ConditionFactor(Thing thing)
-        {
-            if (!thing.def.useHitPoints || thing.MaxHitPoints <= 0) return 1f;
-            float ratio = (float)thing.HitPoints / thing.MaxHitPoints;
-            return Mathf.Pow(ratio, 1.8f);
-        }
+            float h = 1f;
+            if (thing.def.useHitPoints && thing.MaxHitPoints > 0)
+                h = Mathf.Clamp01((float)thing.HitPoints / thing.MaxHitPoints);
 
-        private static float QualityFactor(Thing thing)
-        {
+            float q = QualityScores[2]; // default: Normal
             if (thing.TryGetQuality(out QualityCategory qc))
             {
-                int idx = (int)qc;
-                if (idx >= 0 && idx < QualityMultipliers.Length)
-                    return QualityMultipliers[idx];
+                int qi = (int)qc;
+                if (qi >= 0 && qi < QualityScores.Length)
+                    q = QualityScores[qi];
             }
-            return 0.80f;
-        }
 
-        private static float SkillFactor(int skillLevel)
-        {
-            float normalized = Mathf.Clamp01(skillLevel / 20f);
-            return 0.10f + 0.90f * Mathf.Pow(normalized, 0.6f);
-        }
+            // 2 — weighted score
+            float x = WeightSkill * s + WeightHP * h + WeightQuality * q;
 
-        private static float TaintFactor(Thing thing)
-        {
+            // 3 — logistic sigmoid
+            float sigmoid = 1f / (1f + Mathf.Exp(-SigmoidK * (x  - SigmoidX0)));
+            float sigMin  = 1f / (1f + Mathf.Exp(-SigmoidK * (0f - SigmoidX0)));
+            float sigMax  = 1f / (1f + Mathf.Exp(-SigmoidK * (1f - SigmoidX0)));
+
+            // 4 — renormalise to [MinReturn, 1.0]
+            float renorm = (sigmoid - sigMin) / (sigMax - sigMin);
+            float result = MinReturn + (1f - MinReturn) * renorm;
+
+            // 5 — taint: flat multiplier, never below MinReturn
             if (thing is Apparel apparel && apparel.WornByCorpse)
-                return 0.50f;
-            return 1f;
+                result = Mathf.Max(MinReturn, result * TaintMult);
+
+            return result;
         }
     }
 }
