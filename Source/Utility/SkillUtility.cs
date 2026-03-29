@@ -6,13 +6,12 @@ namespace RRRR
 {
     /// <summary>
     /// Skill-related calculations for repair: tech difficulty, success chance,
-    /// and failure severity. Uses formulas from DESIGN.md.
+    /// and failure severity.
     /// </summary>
     public static class SkillUtility
     {
-        // Tech difficulty multipliers indexed by TechLevel ordinal
-        // Undefined=1.0, Animal=0.8, Neolithic=0.8, Medieval=0.9, Industrial=1.0,
-        // Spacer=1.3, Ultra=1.6, Archotech=2.0
+        // Tech difficulty multipliers indexed by TechLevel ordinal.
+        // Higher = harder to repair (lower success chance).
         private static readonly float[] TechDifficultyMap =
         {
             1.00f, // Undefined
@@ -26,22 +25,19 @@ namespace RRRR
         };
 
         /// <summary>
-        /// Get the tech difficulty multiplier for an item based on its research prerequisite.
+        /// Get the tech difficulty multiplier for an item based on its tech level.
         /// Higher = harder to repair. Falls back to Industrial (1.0) if unknown.
         /// </summary>
         public static float GetTechDifficulty(ThingDef def)
         {
             TechLevel level = TechLevel.Undefined;
 
-            // Try the single research prerequisite first
             if (def.recipeMaker?.researchPrerequisite != null)
             {
                 level = def.recipeMaker.researchPrerequisite.techLevel;
             }
-            // Then try the list
             else if (def.recipeMaker?.researchPrerequisites != null)
             {
-                // Use the highest tech level among prerequisites
                 for (int i = 0; i < def.recipeMaker.researchPrerequisites.Count; i++)
                 {
                     var rp = def.recipeMaker.researchPrerequisites[i];
@@ -50,21 +46,19 @@ namespace RRRR
                 }
             }
 
-            // Fallback: Industrial for unknown items
             if (level == TechLevel.Undefined)
                 level = TechLevel.Industrial;
 
             int idx = (int)level;
             if (idx >= 0 && idx < TechDifficultyMap.Length)
-                return TechDifficultyMap[idx] * RRRR_Mod.Settings.repairTechDifficultyMult;
+                return TechDifficultyMap[idx];
 
-            return 1.0f * RRRR_Mod.Settings.repairTechDifficultyMult;
+            return 1.0f;
         }
 
         /// <summary>
         /// Success chance per repair cycle.
-        /// Formula: (0.50 + skill × 0.025) / techDifficulty
-        /// Clamped to [0.05, 1.0].
+        /// Formula: (0.50 + skill × 0.025) / techDifficulty, clamped to [0.05, 1.0].
         /// </summary>
         public static float RepairSuccessChance(int skillLevel, float techDifficulty)
         {
@@ -74,63 +68,41 @@ namespace RRRR
         }
 
         /// <summary>
-        /// Determine failure severity. Returns true for critical failure.
-        /// Critical failures only happen when item HP is below 50%.
-        /// Critical = 20% of failures when below 50% HP.
+        /// Returns true if this failure should be a critical failure.
+        /// Critical failures only occur when item HP is below 50%, at a 20% rate.
         /// </summary>
         public static bool IsCriticalFailure(Thing item)
         {
-            if (!item.def.useHitPoints)
+            if (!item.def.useHitPoints || item.MaxHitPoints <= 0)
                 return false;
-
-            if (item.MaxHitPoints <= 0)
+            if ((float)item.HitPoints / item.MaxHitPoints >= 0.50f)
                 return false;
-
-            float hpRatio = (float)item.HitPoints / item.MaxHitPoints;
-            if (hpRatio >= 0.50f)
-                return false;
-
-            // 20% chance of critical when below 50% HP
             return Rand.Chance(0.20f);
         }
 
-        /// <summary>
-        /// Apply minor failure: 5% HP loss.
-        /// </summary>
+        /// <summary>Apply minor failure: 5% HP loss.</summary>
         public static void ApplyMinorFailure(Thing item)
         {
-            if (!item.def.useHitPoints)
-                return;
-
+            if (!item.def.useHitPoints) return;
             int hpLoss = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * 0.05f));
             item.HitPoints = Mathf.Max(0, item.HitPoints - hpLoss);
         }
 
-        /// <summary>
-        /// Apply critical failure: 15% HP loss + quality degradation.
-        /// </summary>
+        /// <summary>Apply critical failure: 15% HP loss + one quality level drop.</summary>
         public static void ApplyCriticalFailure(Thing item)
         {
-            if (!item.def.useHitPoints)
-                return;
-
-            // 15% HP loss
+            if (!item.def.useHitPoints) return;
             int hpLoss = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * 0.15f));
             item.HitPoints = Mathf.Max(0, item.HitPoints - hpLoss);
 
-            // Quality degradation — drop one level
             CompQuality compQuality = item.TryGetComp<CompQuality>();
             if (compQuality != null && compQuality.Quality > QualityCategory.Awful)
-            {
-                QualityCategory newQuality = compQuality.Quality - 1;
-                compQuality.SetQuality(newQuality, null);
-            }
+                compQuality.SetQuality(compQuality.Quality - 1, null);
         }
 
         /// <summary>
         /// Calculate material cost for one repair cycle.
-        /// Formula: (cycleHP / maxHP) × baseCost × 1.2 × techDifficulty
-        /// Returns the count for a single material entry.
+        /// Used as a legacy reference; main path now uses MaterialUtility.GetRepairCycleCost.
         /// </summary>
         public static int RepairCycleMaterialCost(int baseCost, int maxHP, int cycleHP, float techDifficulty)
         {

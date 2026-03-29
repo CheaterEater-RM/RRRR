@@ -33,7 +33,6 @@ namespace RRRR
         /// <summary>
         /// bench ThingDef → the WorkTypeDef that canonically services it.
         /// Vanilla WorkGiver_DoBill entries take priority over modded ones.
-        /// Used by designation WorkGivers to match items to the right work column.
         /// </summary>
         public static readonly Dictionary<ThingDef, WorkTypeDef> BenchWorkTypes
             = new Dictionary<ThingDef, WorkTypeDef>();
@@ -54,48 +53,40 @@ namespace RRRR
             BuildFromRecipeMakers();
             AssignFallbacks();
             PatchRecipeFilters();
-            LogSummary();
+
+            R4Log.Debug($"Cache built: {BenchCraftables.Count} benches, " +
+                        $"{BenchCraftables.Values.Sum(s => s.Count)} item-bench mappings.");
         }
 
         // ── Step 0: bench → WorkTypeDef map ───────────────────────────────────
 
         static void BuildBenchWorkTypes()
         {
-            // Two-pass approach: vanilla WorkGiver_DoBill entries first, then
-            // everything else. This ensures mod load order doesn't cause a
-            // modded Crafting-type WorkGiver to displace the canonical Smithing
-            // entry for e.g. the machining table.
-            var vanillaType  = typeof(WorkGiver_DoBill);
+            var vanillaType = typeof(WorkGiver_DoBill);
 
-            // Pass 1: vanilla WorkGiver_DoBill only
+            // Pass 1: vanilla WorkGiver_DoBill only (priority)
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
                 if (wg.giverClass != vanillaType) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
-
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
-                {
                     if (!BenchWorkTypes.ContainsKey(bench))
                         BenchWorkTypes[bench] = wg.workType;
-                }
             }
 
-            // Pass 2: all other WorkGivers (modded) — fill in any gaps only
+            // Pass 2: modded WorkGivers — fill gaps only
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
-                if (wg.giverClass == vanillaType) continue; // already done
+                if (wg.giverClass == vanillaType) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
-
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
-                {
                     if (!BenchWorkTypes.ContainsKey(bench))
                         BenchWorkTypes[bench] = wg.workType;
-                }
             }
 
-            Log.Message($"[R4] BenchWorkTypes: {BenchWorkTypes.Count} benches mapped.");
+            R4Log.Debug($"BenchWorkTypes: {BenchWorkTypes.Count} benches mapped.");
         }
 
         // ── Step 1: invert recipeMaker.recipeUsers ─────────────────────────────
@@ -122,8 +113,8 @@ namespace RRRR
         {
             var covered     = new HashSet<ThingDef>(BenchCraftables.Values.SelectMany(s => s));
             var fallbackMap = BuildFallbackMap();
+            int count       = 0;
 
-            int count = 0;
             foreach (ThingDef item in DefDatabase<ThingDef>.AllDefsListForReading)
             {
                 if (!IsR4Eligible(item)) continue;
@@ -137,10 +128,10 @@ namespace RRRR
                 set.Add(item);
                 count++;
 
-                Log.Message($"[R4] Fallback → {item.defName} (tech={item.techLevel}) → {bench.defName}");
+                R4Log.Debug($"Fallback → {item.defName} (tech={item.techLevel}) → {bench.defName}");
             }
 
-            Log.Message($"[R4] {count} items assigned via techLevel fallback.");
+            R4Log.Debug($"{count} items assigned via techLevel fallback.");
         }
 
         static Dictionary<TechLevel, ThingDef> BuildFallbackMap()
@@ -150,8 +141,7 @@ namespace RRRR
             ThingDef electricSmithy = DefDatabase<ThingDef>.GetNamedSilentFail("ElectricSmithy");
             ThingDef machining      = DefDatabase<ThingDef>.GetNamedSilentFail("TableMachining");
             ThingDef fabrication    = DefDatabase<ThingDef>.GetNamedSilentFail("FabricationBench");
-
-            ThingDef smithy = electricSmithy ?? fueledSmithy;
+            ThingDef smithy         = electricSmithy ?? fueledSmithy;
 
             return new Dictionary<TechLevel, ThingDef>
             {
@@ -201,16 +191,15 @@ namespace RRRR
 
                 if (allowed.Count == 0)
                 {
-                    Log.Warning($"[R4] {recipe.defName}: no eligible items after filter build — bill will be empty.");
+                    R4Log.Warn($"{recipe.defName}: no eligible items after filter build — bill will be empty.");
                     continue;
                 }
 
                 recipe.fixedIngredientFilter = BuildFilter(allowed);
-
                 if (recipe.ingredients != null && recipe.ingredients.Count > 0)
                     recipe.ingredients[0].filter = BuildFilter(allowed);
 
-                Log.Message($"[R4] {recipe.defName}: {allowed.Count} items in filter.");
+                R4Log.Debug($"{recipe.defName}: {allowed.Count} items in filter.");
             }
         }
 
@@ -224,39 +213,23 @@ namespace RRRR
 
         // ── Public helpers ─────────────────────────────────────────────────────
 
-        /// <summary>
-        /// Returns true if any of the given bench defs are serviced by the
-        /// given work type. Used by designation WorkGivers to filter candidates.
-        /// </summary>
         public static bool AnyBenchMatchesWorkType(IEnumerable<ThingDef> benchDefs, WorkTypeDef workType)
         {
             foreach (ThingDef bench in benchDefs)
-            {
                 if (BenchWorkTypes.TryGetValue(bench, out WorkTypeDef wt) && wt == workType)
                     return true;
-            }
             return false;
         }
 
         // ── Eligibility predicate ──────────────────────────────────────────────
 
         /// <summary>
-        /// An item is R4-eligible if:
-        /// - it uses hit points (can be damaged/repaired)
-        /// - it is a weapon or apparel
-        /// - it is smeltable (player-owned item, not a turret internal component)
+        /// An item is R4-eligible if it uses hit points, is a weapon or apparel,
+        /// and is smeltable (excludes improvised-weapon items like beer and wood logs).
         /// </summary>
         public static bool IsR4Eligible(ThingDef def) =>
             def.useHitPoints &&
             (def.IsWeapon || def.IsApparel) &&
             def.smeltable;
-
-        // ── Logging ───────────────────────────────────────────────────────────
-
-        static void LogSummary()
-        {
-            foreach (KeyValuePair<ThingDef, HashSet<ThingDef>> kvp in BenchCraftables)
-                Log.Message($"[R4] BenchCraftables[{kvp.Key.defName}]: {kvp.Value.Count} items");
-        }
     }
 }

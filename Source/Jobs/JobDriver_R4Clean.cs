@@ -6,16 +6,6 @@ using Verse.AI;
 
 namespace RRRR
 {
-    /// <summary>
-    /// Clean job using vanilla ingredient-gathering pattern.
-    /// Works for both designation-based and bill-based cleaning.
-    ///
-    /// Target layout (matches vanilla DoBill):
-    ///   TargetA       = workbench
-    ///   TargetQueueA  = [tainted apparel]
-    ///   TargetQueueB  = ingredient stacks
-    ///   TargetC       = ingredient placement cell
-    /// </summary>
     public class JobDriver_R4Clean : JobDriver
     {
         private const TargetIndex BenchInd      = TargetIndex.A;
@@ -25,7 +15,7 @@ namespace RRRR
         private float workLeft;
         private float totalWork;
 
-        private Thing Bench       => job.GetTarget(BenchInd).Thing;
+        private Thing Bench        => job.GetTarget(BenchInd).Thing;
         private bool  IsBillDriven => job.bill != null;
 
         private Thing _cachedItem;
@@ -43,19 +33,14 @@ namespace RRRR
             }
         }
 
-        // ── Report string ─────────────────────────────────────────────────────
-
         public override string GetReport()
         {
             Thing item  = CleanItem;
             Thing bench = Bench;
-            // Explicit string locals avoid CS8957 (TaggedString vs string ternary)
             string itemLabel  = item  != null ? item.LabelShort  : "unknown".Translate().ToString();
             string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
             return "R4_JobReport_Clean".Translate(itemLabel, benchLabel);
         }
-
-        // ── Reservations ──────────────────────────────────────────────────────
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
@@ -88,10 +73,8 @@ namespace RRRR
             this.FailOn(delegate
             {
                 Thing item = CleanItem;
-                if (item == null || item.Destroyed)
-                    return true;
-                if (IsBillDriven)
-                    return job.bill.DeletedOrDereferenced || job.bill.suspended;
+                if (item == null || item.Destroyed) return true;
+                if (IsBillDriven) return job.bill.DeletedOrDereferenced || job.bill.suspended;
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean) == null)
                     return true;
                 return false;
@@ -193,7 +176,9 @@ namespace RRRR
                 if (item == null || item.Destroyed)
                     return;
 
-                MaterialUtility.ConsumeIngredientsOnBench(Bench, pawn.Map);
+                // Consume only the expected clean materials, not everything on bench cells
+                var cleanCost = MaterialUtility.GetCleanCost(item);
+                MaterialUtility.ConsumeIngredientsOnBench(Bench, pawn.Map, cleanCost);
 
                 if (item is Apparel apparel)
                 {

@@ -66,10 +66,13 @@
   <R4_Settings_RepairHeader>Repair Settings</R4_Settings_RepairHeader>
   <R4_Settings_RepairHpPerCycle>HP restored per cycle</R4_Settings_RepairHpPerCycle>
   <R4_Settings_RepairCyclesNote>{0} cycles to fully repair</R4_Settings_RepairCyclesNote>
-  <R4_Settings_RepairTechDiffMult>Tech difficulty multiplier</R4_Settings_RepairTechDiffMult>
 
   <R4_Settings_CleanHeader>Clean Settings</R4_Settings_CleanHeader>
   <R4_Settings_CleanCostFraction>Material cost (fraction of make cost)</R4_Settings_CleanCostFraction>
+
+  <R4_Settings_DebugHeader>Developer</R4_Settings_DebugHeader>
+  <R4_Settings_DebugLogging>Enable debug logging</R4_Settings_DebugLogging>
+  <R4_Settings_DebugLogging_Tip>Writes verbose [R4] messages to the log. Useful for diagnosing routing and cost issues. Leave off during normal play.</R4_Settings_DebugLogging_Tip>
 
   <R4_Settings_Reset>Reset to defaults</R4_Settings_Reset>
 </LanguageData>

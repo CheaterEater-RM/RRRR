@@ -4,17 +4,9 @@
   <!-- DESIGNATION-BASED WORK                                      -->
   <!--                                                             -->
   <!-- Each action (recycle, repair, clean) is registered under    -->
-  <!-- three WorkGiverDefs — Crafting, Smithing, Tailoring — so   -->
-  <!-- the work tab column matches the bench the item will go to.  -->
-  <!--                                                             -->
-  <!-- The shared WorkGiver_R4DesignationBase.FindBench filters    -->
-  <!-- candidates to only benches whose WorkTypeDef matches the    -->
-  <!-- WorkGiver's own def.workType, so a Smithing pawn only picks -->
-  <!-- up smithy items and a Tailoring pawn only tailor items.     -->
-  <!--                                                             -->
-  <!-- Items craftable at multiple bench types appear under        -->
-  <!-- multiple columns; the pawn with the highest-priority        -->
-  <!-- enabled column wins.                                        -->
+  <!-- multiple WorkGiverDefs matching the bench work types.       -->
+  <!-- Clean has no Smithing WorkGiver since tainted apparel is    -->
+  <!-- never routed to smithies.                                   -->
   <!-- ═══════════════════════════════════════════════════════════ -->
 
   <!-- ─── RECYCLE ─────────────────────────────────────────────── -->
@@ -88,23 +80,14 @@
   </WorkGiverDef>
 
   <!-- ─── CLEAN ───────────────────────────────────────────────── -->
+  <!-- Tainted apparel routes to crafting spot and tailor benches  -->
+  <!-- only — never smithies. No Smithing WorkGiver for clean.     -->
 
   <WorkGiverDef>
     <defName>RRRR_Clean_Crafting</defName>
     <label>clean tainted apparel (craft)</label>
     <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
     <workType>Crafting</workType>
-    <priorityInType>45</priorityInType>
-    <verb>clean</verb>
-    <gerund>cleaning tainted apparel</gerund>
-    <requiredCapacities><li>Manipulation</li></requiredCapacities>
-  </WorkGiverDef>
-
-  <WorkGiverDef>
-    <defName>RRRR_Clean_Smithing</defName>
-    <label>clean tainted apparel (smith)</label>
-    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
-    <workType>Smithing</workType>
     <priorityInType>45</priorityInType>
     <verb>clean</verb>
     <gerund>cleaning tainted apparel</gerund>
@@ -124,17 +107,8 @@
 
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- BILL-BASED REPAIR                                           -->
-  <!--                                                             -->
-  <!-- One WorkGiverDef per bench (or bench group). Each uses our  -->
-  <!-- custom WorkGiver_R4RepairBill which creates RRRR_Repair     -->
-  <!-- jobs with proper material hauling. The workType must match  -->
-  <!-- the bench's vanilla workType so the right pawns work there. -->
-  <!--                                                             -->
-  <!-- Recycle and clean bills use vanilla's WorkGiver_DoBill      -->
-  <!-- (no custom WorkGiver needed for those).                     -->
   <!-- ═══════════════════════════════════════════════════════════ -->
 
-  <!-- Crafting spot: Crafting work type -->
   <WorkGiverDef>
     <defName>RRRR_RepairBill_CraftingSpot</defName>
     <label>repair items at crafting spot</label>
@@ -150,7 +124,6 @@
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
-  <!-- Tailor benches: Tailoring work type -->
   <WorkGiverDef>
     <defName>RRRR_RepairBill_Tailor</defName>
     <label>repair items at tailor bench</label>
@@ -167,7 +140,6 @@
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
-  <!-- Smithy: Smithing work type -->
   <WorkGiverDef>
     <defName>RRRR_RepairBill_Smithy</defName>
     <label>repair items at smithy</label>
@@ -184,7 +156,6 @@
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
-  <!-- Machining table: Smithing work type -->
   <WorkGiverDef>
     <defName>RRRR_RepairBill_Machining</defName>
     <label>repair items at machining table</label>
@@ -200,7 +171,6 @@
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
-  <!-- Fabrication bench: Smithing work type -->
   <WorkGiverDef>
     <defName>RRRR_RepairBill_Fabrication</defName>
     <label>repair items at fabrication bench</label>

@@ -16,12 +16,16 @@ namespace RRRR
     /// </summary>
     public class RRRR_Settings : ModSettings
     {
+        // ── Debug ─────────────────────────────────────────────────────────────
+        /// <summary>If true, verbose [R4] debug messages are written to the log.</summary>
+        public bool debugLogging = false;
+
         // ── Recycle ───────────────────────────────────────────────────────────
         /// <summary>Scalar applied to all recycled material yields. 1.0 = default.</summary>
         public float recycleGlobalMult = 1.0f;
 
         /// <summary>If true, intricate components are excluded from recycle returns.</summary>
-        public bool skipIntricateComponents = true;
+        public bool skipIntricateComponents = false;
 
         // ── Repair ────────────────────────────────────────────────────────────
         /// <summary>
@@ -30,12 +34,6 @@ namespace RRRR
         /// At 20%: 5 cycles to full. At 10%: 10 cycles. At 25%: 4 cycles.
         /// </summary>
         public float repairHpPerCycle = 0.20f;
-
-        /// <summary>
-        /// Global scalar applied to tech difficulty when calculating repair success chance.
-        /// 1.0 = default. Higher = harder to repair all items.
-        /// </summary>
-        public float repairTechDifficultyMult = 1.0f;
 
         // ── Clean ─────────────────────────────────────────────────────────────
         /// <summary>
@@ -70,20 +68,20 @@ namespace RRRR
         public override void ExposeData()
         {
             base.ExposeData();
+            Scribe_Values.Look(ref debugLogging,            "debugLogging",            false);
             Scribe_Values.Look(ref recycleGlobalMult,       "recycleGlobalMult",       1.0f);
             Scribe_Values.Look(ref skipIntricateComponents, "skipIntricateComponents", true);
-            Scribe_Values.Look(ref repairHpPerCycle,           "repairHpPerCycle",           0.20f);
-            Scribe_Values.Look(ref repairTechDifficultyMult,     "repairTechDifficultyMult",   1.0f);
-            Scribe_Values.Look(ref cleanCostFraction,            "cleanCostFraction",          0.20f);
+            Scribe_Values.Look(ref repairHpPerCycle,        "repairHpPerCycle",        0.20f);
+            Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
         }
 
         public void ResetToDefaults()
         {
-            recycleGlobalMult          = 1.0f;
-            skipIntricateComponents    = true;
-            repairHpPerCycle           = 0.20f;
-            repairTechDifficultyMult   = 1.0f;
-            cleanCostFraction          = 0.20f;
+            debugLogging            = false;
+            recycleGlobalMult       = 1.0f;
+            skipIntricateComponents = true;
+            repairHpPerCycle        = 0.20f;
+            cleanCostFraction       = 0.20f;
         }
     }
 
@@ -97,7 +95,6 @@ namespace RRRR
         public RRRR_Mod(ModContentPack content) : base(content)
         {
             Settings = GetSettings<RRRR_Settings>();
-            Log.Message("[R4] Mod constructor fired. Settings loaded.");
         }
 
         public override string SettingsCategory() => "R4: Reduce, Reuse, Recycle, Repair";
@@ -126,7 +123,6 @@ namespace RRRR
             listing.Label("R4_Settings_RepairHeader".Translate());
             listing.GapLine();
 
-            // Show HP per cycle as a percentage; also show derived cycle count
             int cycles = Settings.RepairCyclesFull;
             listing.Label("R4_Settings_RepairHpPerCycle".Translate()
                 + $": {Settings.repairHpPerCycle:P0}"
@@ -134,10 +130,6 @@ namespace RRRR
                 + "R4_Settings_RepairCyclesNote".Translate(cycles)
                 + ")");
             Settings.repairHpPerCycle = listing.Slider(Settings.repairHpPerCycle, 0.05f, 0.50f);
-
-            listing.Label("R4_Settings_RepairTechDiffMult".Translate()
-                + $": {Settings.repairTechDifficultyMult:F2}x");
-            Settings.repairTechDifficultyMult = listing.Slider(Settings.repairTechDifficultyMult, 0.5f, 3.0f);
 
             listing.Gap();
 
@@ -148,6 +140,17 @@ namespace RRRR
             listing.Label("R4_Settings_CleanCostFraction".Translate()
                 + $": {Settings.cleanCostFraction:P0}");
             Settings.cleanCostFraction = listing.Slider(Settings.cleanCostFraction, 0.05f, 0.50f);
+
+            listing.Gap();
+
+            // ── Debug ─────────────────────────────────────────────────────────
+            listing.Label("R4_Settings_DebugHeader".Translate());
+            listing.GapLine();
+
+            listing.CheckboxLabeled(
+                "R4_Settings_DebugLogging".Translate(),
+                ref Settings.debugLogging,
+                "R4_Settings_DebugLogging_Tip".Translate());
 
             listing.GapLine();
             if (listing.ButtonText("R4_Settings_Reset".Translate()))

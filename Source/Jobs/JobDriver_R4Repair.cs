@@ -6,19 +6,6 @@ using Verse.AI;
 
 namespace RRRR
 {
-    /// <summary>
-    /// Repair job using vanilla ingredient-gathering pattern.
-    /// Works for both designation-based and bill-based repair.
-    ///
-    /// Target layout (matches vanilla DoBill):
-    ///   TargetA       = workbench
-    ///   TargetQueueA  = [item to repair]
-    ///   TargetQueueB  = ingredient stacks
-    ///   TargetC       = ingredient placement cell
-    ///
-    /// HP restored per cycle is driven by RRRR_Mod.Settings.repairHpPerCycle
-    /// so it matches the cost formula in MaterialUtility.
-    /// </summary>
     public class JobDriver_R4Repair : JobDriver
     {
         private const TargetIndex BenchInd      = TargetIndex.A;
@@ -28,7 +15,7 @@ namespace RRRR
         private float cycleWorkLeft;
         private float cycleWorkTotal;
 
-        private Thing Bench       => job.GetTarget(BenchInd).Thing;
+        private Thing Bench        => job.GetTarget(BenchInd).Thing;
         private bool  IsBillDriven => job.bill != null;
 
         private Thing _cachedItem;
@@ -46,8 +33,6 @@ namespace RRRR
             }
         }
 
-        // ── Report string ─────────────────────────────────────────────────────
-
         public override string GetReport()
         {
             Thing item  = RepairItem;
@@ -56,8 +41,6 @@ namespace RRRR
             string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
             return "R4_JobReport_Repair".Translate(itemLabel, benchLabel);
         }
-
-        // ── Reservations ──────────────────────────────────────────────────────
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
@@ -90,10 +73,8 @@ namespace RRRR
             this.FailOn(delegate
             {
                 Thing item = RepairItem;
-                if (item == null || item.Destroyed)
-                    return true;
-                if (IsBillDriven)
-                    return job.bill.DeletedOrDereferenced || job.bill.suspended;
+                if (item == null || item.Destroyed) return true;
+                if (IsBillDriven) return job.bill.DeletedOrDereferenced || job.bill.suspended;
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Repair) == null)
                     return true;
                 return false;
@@ -170,7 +151,6 @@ namespace RRRR
                 }
                 float baseWork = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
                 if (baseWork <= 0f) baseWork = 1000f;
-                // Work per cycle scales with item complexity but is independent of HP setting
                 cycleWorkTotal = Mathf.Clamp(baseWork * 0.05f, 200f, 800f);
                 if (cycleWorkLeft <= 0f) cycleWorkLeft = cycleWorkTotal;
             };
@@ -201,7 +181,9 @@ namespace RRRR
                 if (item == null || item.Destroyed)
                     return;
 
-                MaterialUtility.ConsumeIngredientsOnBench(Bench, pawn.Map);
+                // Consume only the expected cycle materials, not everything on bench cells
+                var cycleCost = MaterialUtility.GetRepairCycleCost(item);
+                MaterialUtility.ConsumeIngredientsOnBench(Bench, pawn.Map, cycleCost);
 
                 int skillLevel       = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
                 float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
@@ -209,8 +191,6 @@ namespace RRRR
 
                 if (Rand.Chance(successChance))
                 {
-                    // HP restored per cycle comes from the setting, keeping behaviour
-                    // in sync with the cost formula in MaterialUtility.
                     float hpFraction = RRRR_Mod.Settings.repairHpPerCycle;
                     int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * hpFraction));
                     item.HitPoints = Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);

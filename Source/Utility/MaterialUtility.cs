@@ -16,21 +16,15 @@ namespace RRRR
     /// </summary>
     public static class MaterialUtility
     {
-        // Quality scores [0,1] fed into the sigmoid weighted sum.
-        // Awful(0)=0.0 … Legendary(6)=1.0; Normal sits at 0.35 so that
-        // skill-10 + Normal + full HP lands on the sigmoid midpoint (~50% return).
         private static readonly float[] QualityScores = { 0.00f, 0.15f, 0.35f, 0.55f, 0.70f, 0.85f, 1.00f };
 
-        // ── Sigmoid recycle parameters ────────────────────────────────────────
-        // Weighted score: x = WeightSkill*s + WeightHP*h + WeightQuality*q  (each factor ∈ [0,1])
-        // sigmoid output renormalised so x=0 → MinReturn, x=1 → 1.0
         private const float WeightSkill   = 0.35f;
         private const float WeightHP      = 0.40f;
         private const float WeightQuality = 0.25f;
-        private const float SigmoidK      = 7f;    // steepness
-        private const float SigmoidX0     = 0.70f; // midpoint — maps to ~50% return
-        private const float MinReturn     = 0.05f; // floor
-        private const float TaintMult     = 0.60f; // flat post-sigmoid taint penalty
+        private const float SigmoidK      = 7f;
+        private const float SigmoidX0     = 0.70f;
+        private const float MinReturn     = 0.05f;
+        private const float TaintMult     = 0.60f;
 
         private static readonly Dictionary<string, float> RareMaterialPenalties = new Dictionary<string, float>
         {
@@ -72,11 +66,6 @@ namespace RRRR
             return Mathf.Clamp(workToMake * 0.15f, 400f, 2000f);
         }
 
-        /// <summary>
-        /// Final per-material return fraction, incorporating base return, rare-material
-        /// penalties, and the global multiplier.  Used by both DoRecycleProducts and
-        /// the tooltip builder so that what the UI shows matches what spawns.
-        /// </summary>
         public static float GetMaterialReturnPct(ThingDef materialDef, float baseReturnPct)
         {
             float pct = baseReturnPct;
@@ -103,7 +92,6 @@ namespace RRRR
                     if (settings.skipIntricateComponents && entry.thingDef.intricate) continue;
 
                     float materialPct = GetMaterialReturnPct(entry.thingDef, returnPct);
-
                     int count = GenMath.RoundRandom(entry.count * materialPct);
                     Thing product = TryMakeProduct(entry.thingDef, count);
                     if (product != null && TryPlaceOrDestroy(product, spawnPos, map))
@@ -173,20 +161,16 @@ namespace RRRR
         /// <summary>
         /// Cost of one repair cycle per material.
         ///
-        /// Formula per material:
-        ///   divisor      = Settings.RepairCostDivisor  (= RepairCyclesFull * 2)
-        ///   costPerCycle = Ceiling(baseCost / divisor)
-        ///   Include only if costPerCycle * RepairCyclesFull &lt; baseCost
-        ///     (total repair cost strictly less than making the item new)
+        /// Formula: costPerCycle = Ceiling(baseCost / RepairCostDivisor)
+        /// Include only if costPerCycle * RepairCyclesFull &lt; baseCost
+        /// (total repair cost strictly less than making the item new).
+        ///
+        /// Fallback: if nothing qualifies, use 1 unit of the highest-count material.
         ///
         /// At default settings (20% HP/cycle → 5 cycles, divisor = 10):
-        ///   6 steel:       Ceiling(6/10)=1,  1*5=5  &lt; 6  → 1/cycle
-        ///   5 steel:       Ceiling(5/10)=1,  1*5=5  &lt; 5? No → fallback
-        ///   60 steel:      Ceiling(60/10)=6, 6*5=30 &lt; 60 → 6/cycle
-        ///   3 components:  Ceiling(3/10)=1,  1*5=5  &lt; 3? No → fallback candidate
-        ///   60 steel + 3 components: steel passes, components excluded — no fallback needed
-        ///
-        /// Fallback: if nothing passes, use 1 unit of the highest-count material.
+        ///   60 steel:      6/cycle, 30 total  (~50% of make cost) ✓
+        ///   6 components:  1/cycle, 5 total   (&lt; 6 to make)      ✓
+        ///   3 components:  excluded → fallback: 1 component
         /// </summary>
         public static List<ThingDefCountClass> GetRepairCycleCost(Thing item)
         {
@@ -208,7 +192,6 @@ namespace RRRR
                     costs.Add(new ThingDefCountClass(entry.thingDef, costPerCycle));
             }
 
-            // Fallback: nothing qualified — use 1 of the highest-count material
             if (costs.Count == 0)
                 AddFallback(costList, costs);
 
@@ -221,14 +204,8 @@ namespace RRRR
 
         /// <summary>
         /// Cost of a single cleaning operation.
-        ///
-        /// Same structure as repair, but uses Settings.CleanCostDivisor
-        /// (= Round(1 / cleanCostFraction)) instead of RepairCostDivisor.
-        /// At default 20% clean fraction: divisor = 5, same as one repair cycle.
-        ///
-        /// The "include only if costPerCycle * 5 &lt; baseCost" guard uses
-        /// RepairCyclesFull so the threshold is consistent with repair.
-        /// Fallback: 1 of the highest-count material if nothing passes.
+        /// Same structure as repair: Ceiling(baseCost / CleanCostDivisor),
+        /// include only if total &lt; baseCost. Fallback: 1 of highest-count material.
         /// </summary>
         public static List<ThingDefCountClass> GetCleanCost(Thing item)
         {
@@ -238,7 +215,7 @@ namespace RRRR
 
             var settings   = RRRR_Mod.Settings;
             int divisor    = settings.CleanCostDivisor;
-            int cyclesFull = settings.RepairCyclesFull; // threshold consistent with repair
+            int cyclesFull = settings.RepairCyclesFull;
 
             for (int i = 0; i < costList.Count; i++)
             {
@@ -250,7 +227,6 @@ namespace RRRR
                     costs.Add(new ThingDefCountClass(entry.thingDef, costPerOp));
             }
 
-            // Fallback: nothing qualified — use 1 of the highest-count material
             if (costs.Count == 0)
                 AddFallback(costList, costs);
 
@@ -261,10 +237,6 @@ namespace RRRR
         // SHARED COST HELPERS
         // ================================================================
 
-        /// <summary>
-        /// Appends 1 unit of the highest-count material in costList to costs.
-        /// Used as a fallback when no material passes the cost threshold.
-        /// </summary>
         private static void AddFallback(List<ThingDefCountClass> costList, List<ThingDefCountClass> costs)
         {
             ThingDefCountClass best = null;
@@ -283,10 +255,6 @@ namespace RRRR
         // INGREDIENT FINDING
         // ================================================================
 
-        /// <summary>
-        /// Find and reserve ingredients for repair/clean within a search radius
-        /// from the given origin (typically the bench position).
-        /// </summary>
         public static bool TryFindIngredients(
             List<ThingDefCountClass> costs,
             Pawn pawn,
@@ -301,7 +269,7 @@ namespace RRRR
             if (costs == null || costs.Count == 0)
                 return true;
 
-            Map   map      = pawn.Map;
+            Map   map       = pawn.Map;
             bool  useRadius = searchRadius > 0f && searchRadius < 9999f;
             float radiusSq  = searchRadius * searchRadius;
 
@@ -347,9 +315,6 @@ namespace RRRR
             return true;
         }
 
-        /// <summary>
-        /// Overload with no radius restriction — uses pawn position as origin.
-        /// </summary>
         public static bool TryFindIngredients(
             List<ThingDefCountClass> costs,
             Pawn pawn,
@@ -364,18 +329,57 @@ namespace RRRR
         // BENCH INGREDIENT CONSUMPTION
         // ================================================================
 
-        public static void ConsumeIngredientsOnBench(Thing bench, Map map)
+        /// <summary>
+        /// Consumes ingredients from the bench's ingredient stack cells.
+        /// Only destroys items whose ThingDef is in expectedCosts, up to the
+        /// expected count per def. Anything else on those cells is left alone.
+        /// </summary>
+        public static void ConsumeIngredientsOnBench(
+            Thing bench,
+            Map map,
+            List<ThingDefCountClass> expectedCosts)
         {
             if (!(bench is IBillGiver billGiver)) return;
+            if (expectedCosts == null || expectedCosts.Count == 0) return;
+
+            // Build a mutable remaining-count table
+            var remaining = new Dictionary<ThingDef, int>(expectedCosts.Count);
+            for (int i = 0; i < expectedCosts.Count; i++)
+            {
+                var entry = expectedCosts[i];
+                if (entry.thingDef != null && entry.count > 0)
+                {
+                    if (remaining.TryGetValue(entry.thingDef, out int existing))
+                        remaining[entry.thingDef] = existing + entry.count;
+                    else
+                        remaining[entry.thingDef] = entry.count;
+                }
+            }
 
             foreach (IntVec3 cell in billGiver.IngredientStackCells)
             {
+                if (remaining.Count == 0) break;
+
                 var things = map.thingGrid.ThingsListAt(cell);
                 for (int i = things.Count - 1; i >= 0; i--)
                 {
                     Thing t = things[i];
-                    if (t.def.category == ThingCategory.Item && t != bench)
+                    if (t == bench) continue;
+                    if (t.def.category != ThingCategory.Item) continue;
+                    if (!remaining.TryGetValue(t.def, out int need)) continue;
+
+                    int toConsume = Mathf.Min(need, t.stackCount);
+                    need -= toConsume;
+
+                    if (need <= 0)
+                        remaining.Remove(t.def);
+                    else
+                        remaining[t.def] = need;
+
+                    if (toConsume >= t.stackCount)
                         t.Destroy();
+                    else
+                        t.stackCount -= toConsume;
                 }
             }
         }
@@ -384,26 +388,8 @@ namespace RRRR
         // RETURN PERCENT CALCULATION
         // ================================================================
 
-        /// <summary>
-        /// Returns the fraction of make-cost materials to yield when recycling.
-        ///
-        /// Algorithm:
-        ///   1. Normalise skill, HP, and quality each to [0,1].
-        ///   2. Combine into a single score:  x = ws·s + wh·h + wq·q
-        ///   3. Pass through a logistic sigmoid:  σ(x) = 1 / (1 + e^{−k(x−x₀)})
-        ///   4. Renormalise so σ(0)→MinReturn and σ(1)→1.0, giving strict endpoints.
-        ///   5. Apply taint as a flat post-sigmoid multiplier, floored at MinReturn.
-        ///
-        /// Key reference points (defaults):
-        ///   Skill 20, Legendary, HP 100 % → 100 %
-        ///   Skill 10, Normal,    HP 100 % → ~51 %
-        ///   Skill  0, Awful,     HP   0 % → ~5 %
-        ///   Taint (×0.60) at full-HP Normal ≈ clean cost, so cleaning before
-        ///   recycling is roughly break-even; for damaged items it is never worth it.
-        /// </summary>
         public static float CalculateReturnPercent(Thing thing, int skillLevel)
         {
-            // 1 — normalised inputs
             float s = Mathf.Clamp01(skillLevel / 20f);
 
             float h = 1f;
@@ -418,19 +404,13 @@ namespace RRRR
                     q = QualityScores[qi];
             }
 
-            // 2 — weighted score
-            float x = WeightSkill * s + WeightHP * h + WeightQuality * q;
+            float x       = WeightSkill * s + WeightHP * h + WeightQuality * q;
+            float sigmoid = 1f / (1f + Mathf.Exp(-SigmoidK * (x     - SigmoidX0)));
+            float sigMin  = 1f / (1f + Mathf.Exp(-SigmoidK * (0f    - SigmoidX0)));
+            float sigMax  = 1f / (1f + Mathf.Exp(-SigmoidK * (1f    - SigmoidX0)));
+            float renorm  = (sigmoid - sigMin) / (sigMax - sigMin);
+            float result  = MinReturn + (1f - MinReturn) * renorm;
 
-            // 3 — logistic sigmoid
-            float sigmoid = 1f / (1f + Mathf.Exp(-SigmoidK * (x  - SigmoidX0)));
-            float sigMin  = 1f / (1f + Mathf.Exp(-SigmoidK * (0f - SigmoidX0)));
-            float sigMax  = 1f / (1f + Mathf.Exp(-SigmoidK * (1f - SigmoidX0)));
-
-            // 4 — renormalise to [MinReturn, 1.0]
-            float renorm = (sigmoid - sigMin) / (sigMax - sigMin);
-            float result = MinReturn + (1f - MinReturn) * renorm;
-
-            // 5 — taint: flat multiplier, never below MinReturn
             if (thing is Apparel apparel && apparel.WornByCorpse)
                 result = Mathf.Max(MinReturn, result * TaintMult);
 
