@@ -16,9 +16,10 @@ namespace RRRR
         {
             if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
                 return false;
-            if (!pawn.CanReserve(t, 1, -1, null, forced))
+            if (t.IsForbidden(pawn) || !pawn.CanReserve(t, 1, -1, null, forced))
                 return false;
-            if (t.IsForbidden(pawn))
+            // Fast early-out: skip full bench search if no matching bench exists
+            if (!ItemHasMatchingBench(pawn, t))
                 return false;
             return FindBench(pawn, t, forced) != null;
         }

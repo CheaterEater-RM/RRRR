@@ -17,6 +17,10 @@ namespace RRRR
     ///
     /// Also builds BenchWorkTypes: bench ThingDef → WorkTypeDef, used by
     /// designation WorkGivers to filter candidates by the current pawn's work type.
+    ///
+    /// BenchWorkTypes priority: vanilla WorkGiver_DoBill entries take precedence
+    /// over any modded WorkGivers for the same bench, ensuring deterministic
+    /// assignment regardless of mod load order.
     /// </summary>
     public static class R4WorkbenchFilterCache
     {
@@ -27,10 +31,9 @@ namespace RRRR
             = new Dictionary<ThingDef, HashSet<ThingDef>>();
 
         /// <summary>
-        /// bench ThingDef → the WorkTypeDef that services it.
-        /// Built by scanning all WorkGiverDefs with fixedBillGiverDefs.
-        /// Used by designation WorkGivers so they only accept items whose
-        /// target bench matches the WorkGiver's own workType.
+        /// bench ThingDef → the WorkTypeDef that canonically services it.
+        /// Vanilla WorkGiver_DoBill entries take priority over modded ones.
+        /// Used by designation WorkGivers to match items to the right work column.
         /// </summary>
         public static readonly Dictionary<ThingDef, WorkTypeDef> BenchWorkTypes
             = new Dictionary<ThingDef, WorkTypeDef>();
@@ -58,16 +61,35 @@ namespace RRRR
 
         static void BuildBenchWorkTypes()
         {
-            // Scan all WorkGiverDefs that list specific benches via fixedBillGiverDefs.
-            // This covers both vanilla and modded benches automatically.
+            // Two-pass approach: vanilla WorkGiver_DoBill entries first, then
+            // everything else. This ensures mod load order doesn't cause a
+            // modded Crafting-type WorkGiver to displace the canonical Smithing
+            // entry for e.g. the machining table.
+            var vanillaType  = typeof(WorkGiver_DoBill);
+
+            // Pass 1: vanilla WorkGiver_DoBill only
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
+                if (wg.giverClass != vanillaType) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
 
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
                 {
-                    // First registration wins; don't overwrite if already mapped
+                    if (!BenchWorkTypes.ContainsKey(bench))
+                        BenchWorkTypes[bench] = wg.workType;
+                }
+            }
+
+            // Pass 2: all other WorkGivers (modded) — fill in any gaps only
+            foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
+            {
+                if (wg.giverClass == vanillaType) continue; // already done
+                if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
+                if (wg.workType == null) continue;
+
+                foreach (ThingDef bench in wg.fixedBillGiverDefs)
+                {
                     if (!BenchWorkTypes.ContainsKey(bench))
                         BenchWorkTypes[bench] = wg.workType;
                 }
@@ -98,7 +120,7 @@ namespace RRRR
 
         static void AssignFallbacks()
         {
-            var covered = new HashSet<ThingDef>(BenchCraftables.Values.SelectMany(s => s));
+            var covered     = new HashSet<ThingDef>(BenchCraftables.Values.SelectMany(s => s));
             var fallbackMap = BuildFallbackMap();
 
             int count = 0;

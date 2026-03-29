@@ -13,13 +13,19 @@ namespace RRRR
     /// column reflects which bench the item will actually go to.
     ///
     /// FindBench filters candidates to only benches whose WorkTypeDef matches
-    /// this WorkGiver's def.workType, ensuring e.g. a Smithing pawn only picks
-    /// up smithy items and a Tailoring pawn only picks up tailor bench items.
+    /// this WorkGiver's def.workType, ensuring a Smithing pawn only picks up
+    /// smithy items and a Tailoring pawn only picks up tailor bench items.
     ///
     /// Items that route to multiple bench types (e.g. tribal apparel craftable
     /// at both CraftingSpot and HandTailoringBench) will be accepted by both the
     /// Crafting and Tailoring WorkGivers; the pawn with the highest-priority
     /// enabled column wins.
+    ///
+    /// Performance notes:
+    /// - ShouldSkip fast-exits if no designations of our type exist (standard).
+    /// - HasJobOnThing calls ItemHasMatchingBench before the full FindBench so
+    ///   that items routed to a different work type are rejected in O(n_benchDefs)
+    ///   rather than paying the full GenClosest.ClosestThingReachable cost.
     /// </summary>
     public abstract class WorkGiver_R4DesignationBase : WorkGiver_Scanner
     {
@@ -42,8 +48,36 @@ namespace RRRR
         }
 
         /// <summary>
-        /// Finds the closest reachable bench for the item whose WorkTypeDef
-        /// matches this WorkGiver's def.workType.
+        /// Returns true if at least one of this item's valid bench defs is
+        /// serviced by this WorkGiver's workType AND is actually present on the
+        /// map. This is the cheap early-out used before paying for FindBench.
+        /// </summary>
+        protected bool ItemHasMatchingBench(Pawn pawn, Thing item)
+        {
+            List<ThingDef> validBenchDefs = WorkbenchRouter.GetValidBenches(item);
+            if (validBenchDefs == null || validBenchDefs.Count == 0)
+                return false;
+
+            WorkTypeDef requiredWorkType = def.workType;
+            for (int i = 0; i < validBenchDefs.Count; i++)
+            {
+                ThingDef benchDef = validBenchDefs[i];
+                if (!R4WorkbenchFilterCache.BenchWorkTypes.TryGetValue(benchDef, out WorkTypeDef wt))
+                    continue;
+                if (wt != requiredWorkType)
+                    continue;
+                // Check at least one instance of this bench exists on the map
+                if (pawn.Map.listerThings.ThingsOfDef(benchDef).Count > 0)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Finds the closest reachable, usable bench for the item whose
+        /// WorkTypeDef matches this WorkGiver's def.workType.
+        /// Call ItemHasMatchingBench before this to avoid the GenClosest cost
+        /// when no bench of the right type exists.
         /// </summary>
         protected Thing FindBench(Pawn pawn, Thing item, bool forced)
         {
@@ -51,7 +85,6 @@ namespace RRRR
             if (validBenchDefs == null || validBenchDefs.Count == 0)
                 return null;
 
-            // Only consider benches serviced by this WorkGiver's workType
             WorkTypeDef requiredWorkType = def.workType;
             var candidates = new List<Thing>();
             for (int i = 0; i < validBenchDefs.Count; i++)

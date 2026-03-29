@@ -42,23 +42,6 @@ namespace RRRR
             Log.Message("[R4] Building workbench filter cache...");
             RuntimeHelpers.RunClassConstructor(typeof(R4WorkbenchFilterCache).TypeHandle);
 
-            int compCount = 0;
-            foreach (var def in DefDatabase<ThingDef>.AllDefsListForReading)
-            {
-                if (def.comps != null)
-                {
-                    for (int i = 0; i < def.comps.Count; i++)
-                    {
-                        if (def.comps[i] is CompProperties_Recyclable)
-                        {
-                            compCount++;
-                            break;
-                        }
-                    }
-                }
-            }
-            Log.Message($"[R4] CompProperties_Recyclable found on {compCount} ThingDefs.");
-
             Log.Message("[R4] === R4 Startup Complete ===");
         }
 

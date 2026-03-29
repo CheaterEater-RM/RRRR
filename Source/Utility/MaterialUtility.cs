@@ -17,40 +17,26 @@ namespace RRRR
         private static readonly Dictionary<string, float> RareMaterialPenalties = new Dictionary<string, float>
         {
             { "ComponentIndustrial", 0.25f },
-            { "ComponentSpacer", 0.15f },
-            { "Chemfuel", 0.30f }
+            { "ComponentSpacer",     0.15f },
+            { "Chemfuel",            0.30f }
         };
 
         // ================================================================
         // SAFE THING SPAWNING
         // ================================================================
 
-        /// <summary>
-        /// Safely create a Thing from a ThingDef, guarding against MadeFromStuff
-        /// defs that require a stuff parameter. Returns null if the def can't be
-        /// safely instantiated as a raw material.
-        /// </summary>
         private static Thing TryMakeProduct(ThingDef def, int count)
         {
-            if (def == null || count <= 0)
-                return null;
-            if (def.MadeFromStuff)
-                return null;
-
+            if (def == null || count <= 0) return null;
+            if (def.MadeFromStuff) return null;
             Thing product = ThingMaker.MakeThing(def);
             product.stackCount = count;
             return product;
         }
 
-        /// <summary>
-        /// Attempt to place a product thing on the map. Destroys the thing if
-        /// placement fails to prevent orphaned objects.
-        /// Returns true if placed successfully.
-        /// </summary>
         private static bool TryPlaceOrDestroy(Thing product, IntVec3 pos, Map map)
         {
-            if (product == null)
-                return false;
+            if (product == null) return false;
             if (GenPlace.TryPlaceThing(product, pos, map, ThingPlaceMode.Near))
                 return true;
             product.Destroy();
@@ -64,17 +50,16 @@ namespace RRRR
         public static float GetRecycleWorkAmount(Thing thing)
         {
             float workToMake = thing.def.GetStatValueAbstract(StatDefOf.WorkToMake, thing.Stuff);
-            if (workToMake <= 0f)
-                workToMake = 1000f;
+            if (workToMake <= 0f) workToMake = 1000f;
             return Mathf.Clamp(workToMake * 0.15f, 400f, 2000f);
         }
 
         public static List<Thing> DoRecycleProducts(Thing thing, Pawn worker, IntVec3 spawnPos, Map map)
         {
-            var results = new List<Thing>();
+            var results    = new List<Thing>();
             int skillLevel = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
             float returnPct = CalculateReturnPercent(thing, skillLevel);
-            var settings = RRRR_Mod.Settings;
+            var settings   = RRRR_Mod.Settings;
 
             var costList = thing.def.CostListAdjusted(thing.Stuff, errorOnNullStuff: false);
             if (costList != null)
@@ -82,10 +67,8 @@ namespace RRRR
                 for (int i = 0; i < costList.Count; i++)
                 {
                     var entry = costList[i];
-                    if (entry.thingDef == null || entry.count <= 0)
-                        continue;
-                    if (settings.skipIntricateComponents && entry.thingDef.intricate)
-                        continue;
+                    if (entry.thingDef == null || entry.count <= 0) continue;
+                    if (settings.skipIntricateComponents && entry.thingDef.intricate) continue;
 
                     float materialPct = returnPct;
                     if (RareMaterialPenalties.TryGetValue(entry.thingDef.defName, out float penalty))
@@ -94,11 +77,8 @@ namespace RRRR
 
                     int count = GenMath.RoundRandom(entry.count * materialPct);
                     Thing product = TryMakeProduct(entry.thingDef, count);
-                    if (product != null)
-                    {
-                        if (TryPlaceOrDestroy(product, spawnPos, map))
-                            results.Add(product);
-                    }
+                    if (product != null && TryPlaceOrDestroy(product, spawnPos, map))
+                        results.Add(product);
                 }
             }
 
@@ -108,15 +88,13 @@ namespace RRRR
                 {
                     var entry = thing.def.smeltProducts[i];
                     Thing product = TryMakeProduct(entry.thingDef, entry.count);
-                    if (product != null)
-                    {
-                        if (TryPlaceOrDestroy(product, spawnPos, map))
-                            results.Add(product);
-                    }
+                    if (product != null && TryPlaceOrDestroy(product, spawnPos, map))
+                        results.Add(product);
                 }
             }
 
-            if (results.Count == 0 && costList != null && costList.Count > 0)
+            // Guarantee at least 1 non-intricate material on zero-yield results
+            if (results.Count == 0 && costList != null)
             {
                 for (int i = 0; i < costList.Count; i++)
                 {
@@ -136,27 +114,21 @@ namespace RRRR
         }
 
         // ================================================================
-        // PARTIAL MATERIAL RECLAIM (used on repair destruction)
+        // PARTIAL MATERIAL RECLAIM
         // ================================================================
 
-        /// <summary>
-        /// Spawn partial materials from a destroyed item, scaled by return percent.
-        /// Used when repair failure destroys the item.
-        /// </summary>
         public static void SpawnPartialReclaim(Thing item, Pawn worker, float reclaimFactor, IntVec3 spawnPos, Map map)
         {
-            int skillLevel = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+            int skillLevel  = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
             float returnPct = CalculateReturnPercent(item, skillLevel) * reclaimFactor;
 
             var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
-            if (costList == null)
-                return;
+            if (costList == null) return;
 
             for (int i = 0; i < costList.Count; i++)
             {
                 var entry = costList[i];
-                if (entry.thingDef == null || entry.count <= 0 || entry.thingDef.intricate)
-                    continue;
+                if (entry.thingDef == null || entry.count <= 0 || entry.thingDef.intricate) continue;
 
                 int count = GenMath.RoundRandom(entry.count * returnPct);
                 Thing product = TryMakeProduct(entry.thingDef, count);
@@ -173,31 +145,27 @@ namespace RRRR
         {
             var costs = new List<ThingDefCountClass>();
             float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
-            float cycleFraction = 0.10f * techDifficulty;
+            float cycleFraction  = 0.10f * techDifficulty;
             const int cyclesNeeded = 5;
 
             var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
-            if (costList == null)
-                return costs;
+            if (costList == null) return costs;
 
             for (int i = 0; i < costList.Count; i++)
             {
                 var entry = costList[i];
-                if (entry.thingDef == null || entry.count <= 0)
-                    continue;
+                if (entry.thingDef == null || entry.count <= 0) continue;
 
                 int count;
                 if (entry.thingDef.intricate)
                 {
-                    if (entry.count <= 2)
-                        continue;
+                    if (entry.count <= 2) continue;
                     count = Mathf.Max(1, Mathf.FloorToInt(entry.count * cycleFraction));
                 }
                 else
                 {
                     int ceilCost = Mathf.CeilToInt(entry.count * cycleFraction);
-                    if (ceilCost * cyclesNeeded >= entry.count)
-                        continue;
+                    if (ceilCost * cyclesNeeded >= entry.count) continue;
                     count = ceilCost;
                 }
 
@@ -213,19 +181,14 @@ namespace RRRR
 
         public static List<ThingDefCountClass> GetCleanCost(Thing item)
         {
-            var costs = new List<ThingDefCountClass>();
-
+            var costs    = new List<ThingDefCountClass>();
             var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
-            if (costList == null)
-                return costs;
+            if (costList == null) return costs;
 
             for (int i = 0; i < costList.Count; i++)
             {
                 var entry = costList[i];
-                if (entry.thingDef == null || entry.count <= 0)
-                    continue;
-                if (entry.thingDef.intricate)
-                    continue;
+                if (entry.thingDef == null || entry.count <= 0 || entry.thingDef.intricate) continue;
 
                 int count = Mathf.CeilToInt(entry.count * 0.25f);
                 if (count > 0)
@@ -248,14 +211,24 @@ namespace RRRR
         }
 
         // ================================================================
-        // INGREDIENT FINDING (used by WorkGivers)
+        // INGREDIENT FINDING
         // ================================================================
 
+        /// <summary>
+        /// Find and reserve ingredients for repair/clean within a search radius
+        /// from the given origin (typically the bench position).
+        ///
+        /// Respects ingredientSearchRadius to match vanilla bill behaviour and
+        /// avoid full-map scans. Sorts candidates by distance to the origin so
+        /// the closest materials to the bench are consumed first.
+        /// </summary>
         public static bool TryFindIngredients(
             List<ThingDefCountClass> costs,
             Pawn pawn,
+            IntVec3 searchOrigin,
+            float searchRadius,
             out List<Thing> foundThings,
-            out List<int> foundCounts)
+            out List<int>   foundCounts)
         {
             foundThings = new List<Thing>();
             foundCounts = new List<int>();
@@ -263,31 +236,42 @@ namespace RRRR
             if (costs == null || costs.Count == 0)
                 return true;
 
-            Map map = pawn.Map;
+            Map  map      = pawn.Map;
+            bool useRadius = searchRadius > 0f && searchRadius < 9999f;
+            float radiusSq = searchRadius * searchRadius;
 
             for (int i = 0; i < costs.Count; i++)
             {
-                ThingDef needed = costs[i].thingDef;
-                int remaining = costs[i].count;
+                ThingDef needed    = costs[i].thingDef;
+                int      remaining = costs[i].count;
 
                 var available = map.listerThings.ThingsOfDef(needed);
-                if (available == null)
+                if (available == null || available.Count == 0)
                     return false;
 
-                var sorted = new List<Thing>(available);
+                // Build radius-filtered, sorted candidate list for this material.
+                // Sorting allocates a list but only runs when materials are actually
+                // present on the map, and only for the small set matching this def.
+                var sorted = new List<Thing>(available.Count);
+                for (int j = 0; j < available.Count; j++)
+                {
+                    Thing t = available[j];
+                    if (useRadius && (t.Position - searchOrigin).LengthHorizontalSquared > radiusSq)
+                        continue;
+                    sorted.Add(t);
+                }
+
+                // Sort by distance to origin (bench position), matching vanilla logic
                 sorted.Sort((a, b) =>
-                    a.Position.DistanceToSquared(pawn.Position)
-                    .CompareTo(b.Position.DistanceToSquared(pawn.Position)));
+                    (a.Position - searchOrigin).LengthHorizontalSquared
+                    .CompareTo((b.Position - searchOrigin).LengthHorizontalSquared));
 
                 for (int j = 0; j < sorted.Count && remaining > 0; j++)
                 {
                     Thing t = sorted[j];
-                    if (t.IsForbidden(pawn))
-                        continue;
-                    if (!pawn.CanReserve(t))
-                        continue;
-                    if (!pawn.CanReach(t, PathEndMode.ClosestTouch, pawn.NormalMaxDanger()))
-                        continue;
+                    if (t.IsForbidden(pawn))  continue;
+                    if (!pawn.CanReserve(t))   continue;
+                    if (!pawn.CanReach(t, PathEndMode.ClosestTouch, pawn.NormalMaxDanger())) continue;
 
                     int take = Mathf.Min(remaining, t.stackCount);
                     foundThings.Add(t);
@@ -302,10 +286,29 @@ namespace RRRR
             return true;
         }
 
+        /// <summary>
+        /// Overload with no radius restriction — used by designation-based WorkGivers
+        /// which call this only after a bench has already been confirmed reachable.
+        /// The bench's proximity naturally limits how far materials are expected.
+        /// Uses pawn position as origin for closest-first ordering.
+        /// </summary>
+        public static bool TryFindIngredients(
+            List<ThingDefCountClass> costs,
+            Pawn pawn,
+            out List<Thing> foundThings,
+            out List<int>   foundCounts)
+        {
+            return TryFindIngredients(costs, pawn, pawn.Position, 9999f,
+                out foundThings, out foundCounts);
+        }
+
+        // ================================================================
+        // BENCH INGREDIENT CONSUMPTION
+        // ================================================================
+
         public static void ConsumeIngredientsOnBench(Thing bench, Map map)
         {
-            if (!(bench is IBillGiver billGiver))
-                return;
+            if (!(bench is IBillGiver billGiver)) return;
 
             foreach (IntVec3 cell in billGiver.IngredientStackCells)
             {
@@ -330,8 +333,7 @@ namespace RRRR
 
         private static float ConditionFactor(Thing thing)
         {
-            if (!thing.def.useHitPoints || thing.MaxHitPoints <= 0)
-                return 1f;
+            if (!thing.def.useHitPoints || thing.MaxHitPoints <= 0) return 1f;
             float ratio = (float)thing.HitPoints / thing.MaxHitPoints;
             return Mathf.Pow(ratio, 1.8f);
         }
