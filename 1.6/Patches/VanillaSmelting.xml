@@ -1,35 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  R4 Vanilla Smelting Override
+  R4 Smelting Compatibility
 
-  Removes SmeltWeapon, SmeltApparel, and SmeltOrDestroyThing from the electric
-  smelter. Our per-bench recycle bills replace the first two with skill-based
-  recycling. SmeltOrDestroyThing is also removed as it duplicates functionality
-  now covered by the recycle bills.
+  Smelter recipe stripping (SmeltWeapon, SmeltApparel, SmeltOrDestroyThing)
+  is now handled in code by R4WorkbenchFilterCache.StripSmelterRecipes(),
+  which scans ALL ThingDefs at startup and removes those recipes generically.
 
-  Kept intact:
-    ExtractMetalFromSlag   — slag processing, unrelated to gear
-    DestroyWeapon          — deliberate destruction, no material return
-    DestroyApparel         — deliberate destruction, no material return
+  This covers vanilla ElectricSmelter AND any modded smelters (e.g. Fueled
+  Smelters) without requiring explicit per-mod XML patches.
 
-  NOTE: <success>Always</success> = don't fail if target node not found
-  (valid values: Normal, Invert, Always, Never)
+  This file is kept as a placeholder in case XML-side overrides are needed
+  for specific compatibility cases in future.
 -->
 <Patch>
-
-  <Operation Class="PatchOperationRemove">
-    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltWeapon"]</xpath>
-    <success>Always</success>
-  </Operation>
-
-  <Operation Class="PatchOperationRemove">
-    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltApparel"]</xpath>
-    <success>Always</success>
-  </Operation>
-
-  <Operation Class="PatchOperationRemove">
-    <xpath>Defs/ThingDef[defName="ElectricSmelter"]/recipes/li[text()="SmeltOrDestroyThing"]</xpath>
-    <success>Always</success>
-  </Operation>
-
+  <!-- intentionally empty — see R4WorkbenchFilterCache.StripSmelterRecipes() -->
 </Patch>
