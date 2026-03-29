@@ -9,28 +9,24 @@ namespace RRRR
     /// <summary>
     /// Repair job using vanilla ingredient-gathering pattern.
     /// Works for both designation-based and bill-based repair.
-    /// 
+    ///
     /// Target layout (matches vanilla DoBill):
-    ///   TargetA = workbench (stable, never overwritten by queue extraction)
-    ///   TargetQueueA[0] = item to repair
-    ///   TargetQueueB = ingredient stacks (extracted into TargetB during hauling)
-    ///   TargetC = ingredient placement cell
-    /// 
-    /// Flow: gather ingredients via vanilla CollectIngredientsToils →
-    ///       goto bench → haul item → work one cycle → consume → skill check.
-    /// If not fully repaired, designation stays and WorkGiver queues another cycle.
+    ///   TargetA       = workbench
+    ///   TargetQueueA  = [item to repair]
+    ///   TargetQueueB  = ingredient stacks
+    ///   TargetC       = ingredient placement cell
     /// </summary>
     public class JobDriver_R4Repair : JobDriver
     {
-        private const TargetIndex BenchInd = TargetIndex.A;
+        private const TargetIndex BenchInd      = TargetIndex.A;
         private const TargetIndex IngredientInd = TargetIndex.B;
-        private const TargetIndex CellInd = TargetIndex.C;
+        private const TargetIndex CellInd       = TargetIndex.C;
 
         private float cycleWorkLeft;
         private float cycleWorkTotal;
 
-        private Thing Bench => job.GetTarget(BenchInd).Thing;
-        private bool IsBillDriven => job.bill != null;
+        private Thing Bench       => job.GetTarget(BenchInd).Thing;
+        private bool  IsBillDriven => job.bill != null;
 
         private Thing _cachedItem;
         private Thing RepairItem
@@ -39,13 +35,27 @@ namespace RRRR
             {
                 if (_cachedItem == null || _cachedItem.Destroyed)
                 {
-                    var queue = job.GetTargetQueue(BenchInd); // targetQueueA
+                    var queue = job.GetTargetQueue(BenchInd);
                     if (queue != null && queue.Count > 0)
                         _cachedItem = queue[0].Thing;
                 }
                 return _cachedItem;
             }
         }
+
+        // ── Report string ─────────────────────────────────────────────────────
+
+        public override string GetReport()
+        {
+            Thing item  = RepairItem;
+            Thing bench = Bench;
+            // Explicit string locals avoid CS8957 (TaggedString vs string ternary)
+            string itemLabel  = item  != null ? item.LabelShort  : "unknown".Translate().ToString();
+            string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
+            return "R4_JobReport_Repair".Translate(itemLabel, benchLabel);
+        }
+
+        // ── Reservations ──────────────────────────────────────────────────────
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
@@ -67,7 +77,7 @@ namespace RRRR
         public override void ExposeData()
         {
             base.ExposeData();
-            Scribe_Values.Look(ref cycleWorkLeft, "cycleWorkLeft", 0f);
+            Scribe_Values.Look(ref cycleWorkLeft,  "cycleWorkLeft",  0f);
             Scribe_Values.Look(ref cycleWorkTotal, "cycleWorkTotal", 0f);
         }
 
@@ -75,23 +85,19 @@ namespace RRRR
         {
             this.FailOnDestroyedNullOrForbidden(BenchInd);
 
-            // Fail condition depends on bill vs designation
             this.FailOn(delegate
             {
                 Thing item = RepairItem;
                 if (item == null || item.Destroyed)
                     return true;
-
                 if (IsBillDriven)
                     return job.bill.DeletedOrDereferenced || job.bill.suspended;
-
-                // Designation-driven: fail if designation removed
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Repair) == null)
                     return true;
                 return false;
             });
 
-            // ── Phase 1: Gather ingredients using vanilla pattern ──
+            // ── Phase 1: Gather ingredients ──
             Toil gotoBillGiver = Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
 
             yield return Toils_Jump.JumpIf(gotoBillGiver,
@@ -105,7 +111,7 @@ namespace RRRR
                 yield return t;
             }
 
-            // ── Phase 2: Go to bench, then haul item ──
+            // ── Phase 2: Go to bench, haul item ──
             yield return gotoBillGiver;
 
             Toil gotoItem = ToilMaker.MakeToil("R4_Repair_GotoItem");
@@ -113,11 +119,7 @@ namespace RRRR
             gotoItem.initAction = delegate
             {
                 Thing item = RepairItem;
-                if (item == null || item.Destroyed)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
+                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 pawn.pather.StartPath(item, PathEndMode.ClosestTouch);
             };
             yield return gotoItem;
@@ -127,18 +129,12 @@ namespace RRRR
             carryItem.initAction = delegate
             {
                 Thing item = RepairItem;
-                if (item == null || item.Destroyed)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
+                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 if (pawn.carryTracker.CarriedThing == null)
                 {
-                    int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
+                    int count = UnityEngine.Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
                     if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
-                    {
                         EndJobWith(JobCondition.Incompletable);
-                    }
                 }
             };
             yield return carryItem;
@@ -154,11 +150,11 @@ namespace RRRR
             };
             yield return dropItem;
 
-            // ── Phase 3: Work one repair cycle ──
+            // ── Phase 3: Work one cycle ──
             Toil workToil = ToilMaker.MakeToil("R4_Repair_Work");
             workToil.defaultCompleteMode = ToilCompleteMode.Never;
-            workToil.handlingFacing = true;
-            workToil.activeSkill = () => SkillDefOf.Crafting;
+            workToil.handlingFacing      = true;
+            workToil.activeSkill         = () => SkillDefOf.Crafting;
             workToil.FailOnCannotTouch(BenchInd, PathEndMode.InteractionCell);
 
             workToil.initAction = delegate
@@ -170,42 +166,30 @@ namespace RRRR
                     EndJobWith(JobCondition.Succeeded);
                     return;
                 }
-
                 float baseWork = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
                 if (baseWork <= 0f) baseWork = 1000f;
-                cycleWorkTotal = Mathf.Clamp(baseWork * 0.05f, 200f, 800f);
-                if (cycleWorkLeft <= 0f)
-                    cycleWorkLeft = cycleWorkTotal;
+                cycleWorkTotal = UnityEngine.Mathf.Clamp(baseWork * 0.05f, 200f, 800f);
+                if (cycleWorkLeft <= 0f) cycleWorkLeft = cycleWorkTotal;
             };
 
             workToil.tickAction = delegate
             {
                 Thing item = RepairItem;
-                if (item == null || item.Destroyed)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
-
+                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 pawn.rotationTracker.FaceTarget(Bench);
-                float speed = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
+                float speed       = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed,        true);
                 float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
                 cycleWorkLeft -= speed * benchFactor;
                 pawn.skills?.Learn(SkillDefOf.Crafting, 0.12f);
-
-                if (cycleWorkLeft <= 0f)
-                    ReadyForNextToil();
+                if (cycleWorkLeft <= 0f) ReadyForNextToil();
             };
 
-            workToil.WithProgressBar(BenchInd, delegate
-            {
-                if (cycleWorkTotal <= 0f) return 0f;
-                return 1f - (cycleWorkLeft / cycleWorkTotal);
-            });
+            workToil.WithProgressBar(BenchInd,
+                () => cycleWorkTotal <= 0f ? 0f : 1f - (cycleWorkLeft / cycleWorkTotal));
 
             yield return workToil;
 
-            // ── Phase 4: Apply cycle result, consume ingredients ──
+            // ── Phase 4: Apply result, consume ingredients ──
             Toil finishToil = ToilMaker.MakeToil("R4_Repair_Finish");
             finishToil.defaultCompleteMode = ToilCompleteMode.Instant;
             finishToil.initAction = delegate
@@ -216,14 +200,14 @@ namespace RRRR
 
                 MaterialUtility.ConsumeIngredientsOnBench(Bench, pawn.Map);
 
-                int skillLevel = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+                int skillLevel       = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
                 float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
-                float successChance = SkillUtility.RepairSuccessChance(skillLevel, techDifficulty);
+                float successChance  = SkillUtility.RepairSuccessChance(skillLevel, techDifficulty);
 
                 if (Rand.Chance(successChance))
                 {
-                    int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * 0.20f));
-                    item.HitPoints = Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);
+                    int cycleHP = UnityEngine.Mathf.Max(1, UnityEngine.Mathf.RoundToInt(item.MaxHitPoints * 0.20f));
+                    item.HitPoints = UnityEngine.Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);
                 }
                 else
                 {
@@ -248,17 +232,10 @@ namespace RRRR
                 }
 
                 if (item.HitPoints >= item.MaxHitPoints)
-                {
-                    Log.Message($"[R4] Repair complete: {item.LabelCap}");
                     RemoveRepairDesignation(item);
-                }
 
-                // Notify bill if bill-driven
                 if (IsBillDriven)
-                {
-                    var ingredients = new List<Thing> { item };
-                    job.bill.Notify_IterationCompleted(pawn, ingredients);
-                }
+                    job.bill.Notify_IterationCompleted(pawn, new List<Thing> { item });
             };
 
             yield return finishToil;
@@ -268,22 +245,18 @@ namespace RRRR
         {
             if (item == null || item.Map == null) return;
             var des = pawn.Map.designationManager.DesignationOn(item, R4DefOf.R4_Repair);
-            if (des != null)
-                pawn.Map.designationManager.RemoveDesignation(des);
+            if (des != null) pawn.Map.designationManager.RemoveDesignation(des);
         }
 
         private void HandleItemDestroyed(Thing item)
         {
             string itemLabel = item.LabelCap;
-            Log.Message($"[R4] Repair failure destroyed: {itemLabel}");
-
             if (!item.Destroyed)
             {
                 MaterialUtility.SpawnPartialReclaim(item, pawn, 0.25f, pawn.Position, pawn.Map);
                 pawn.Map.designationManager.RemoveAllDesignationsOn(item);
                 item.Destroy(DestroyMode.Vanish);
             }
-
             Messages.Message("R4_RepairItemDestroyed".Translate(itemLabel),
                 new TargetInfo(pawn.Position, pawn.Map), MessageTypeDefOf.NegativeEvent);
         }

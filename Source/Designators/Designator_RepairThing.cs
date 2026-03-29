@@ -5,13 +5,9 @@ using Verse;
 namespace RRRR
 {
     /// <summary>
-    /// Map-order designator for repairing damaged items.
-    /// Supports click and drag-to-designate. Can coexist with R4_Clean.
-    ///
-    /// icon          → menu button texture (UI/Designators/R4RepairMenu)
-    /// DesignationDef.texturePath → in-map overlay (UI/Designators/R4RepairDesignation)
-    /// These are intentionally separate: the menu icon is descriptive, the
-    /// overlay is minimal so it doesn't obscure the item beneath.
+    /// Map-order designator for repairing damaged items (Orders menu / drag-designate).
+    /// Repair cancels any pending recycle designation.
+    /// Uses IsR4Eligible to match the same eligibility as the gizmo system.
     /// </summary>
     public class Designator_RepairThing : Designator
     {
@@ -22,13 +18,13 @@ namespace RRRR
         public Designator_RepairThing()
         {
             defaultLabel = "R4_RepairLabel".Translate();
-            defaultDesc = "R4_RepairDesc".Translate();
+            defaultDesc  = "R4_RepairDesc".Translate();
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RepairMenu", reportFailure: false)
                 ?? ContentFinder<Texture2D>.Get("UI/Designators/Claim", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;
             soundDragChanged = SoundDefOf.Designate_DragStandard_Changed;
-            soundSucceeded = SoundDefOf.Designate_Haul;
-            useMouseIcon = true;
+            soundSucceeded   = SoundDefOf.Designate_Haul;
+            useMouseIcon     = true;
             hasDesignateAllFloatMenuOption = true;
             designateAllLabel = "R4_RepairLabel".Translate();
         }
@@ -58,22 +54,24 @@ namespace RRRR
 
         public override AcceptanceReport CanDesignateThing(Thing t)
         {
-            if (t.def == null || t.Map == null)
+            if (!R4WorkbenchFilterCache.IsR4Eligible(t.def))
                 return false;
-            if (!t.def.IsWeapon && !t.def.IsApparel)
+            if (t.Map == null)
                 return false;
             if (!t.def.useHitPoints || t.HitPoints >= t.MaxHitPoints)
                 return "R4_NotDamaged".Translate();
             if (base.Map.designationManager.DesignationOn(t, Designation) != null)
                 return "R4_AlreadyDesignatedRepair".Translate();
-            if (base.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) != null)
-                return "R4_AlreadyDesignatedRecycle".Translate();
             return true;
         }
 
         public override void DesignateThing(Thing t)
         {
-            base.Map.designationManager.AddDesignation(new Designation(t, Designation));
+            var dm = base.Map.designationManager;
+            // Repair cancels recycle
+            var recycle = dm.DesignationOn(t, R4DefOf.R4_Recycle);
+            if (recycle != null) dm.RemoveDesignation(recycle);
+            dm.AddDesignation(new Designation(t, Designation));
         }
 
         public override void SelectedUpdate()

@@ -5,13 +5,9 @@ using Verse;
 namespace RRRR
 {
     /// <summary>
-    /// Map-order designator for recycling items.
-    /// Supports click-to-designate and drag-to-designate (filled rectangle).
-    ///
-    /// icon          → menu button texture (UI/Designators/R4RecycleMenu)
-    /// DesignationDef.texturePath → in-map overlay (UI/Designators/R4RecycleDesignation)
-    /// These are intentionally separate: the menu icon is descriptive, the
-    /// overlay is minimal so it doesn't obscure the item beneath.
+    /// Map-order designator for recycling items (Orders menu / drag-designate).
+    /// Recycle is mutually exclusive with Repair and Clean.
+    /// Uses IsR4Eligible to match the same eligibility as the gizmo system.
     /// </summary>
     public class Designator_RecycleThing : Designator
     {
@@ -22,13 +18,13 @@ namespace RRRR
         public Designator_RecycleThing()
         {
             defaultLabel = "R4_RecycleLabel".Translate();
-            defaultDesc = "R4_RecycleDesc".Translate();
+            defaultDesc  = "R4_RecycleDesc".Translate();
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RecycleMenu", reportFailure: false)
                 ?? ContentFinder<Texture2D>.Get("UI/Designators/Haul", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;
             soundDragChanged = SoundDefOf.Designate_DragStandard_Changed;
-            soundSucceeded = SoundDefOf.Designate_Haul;
-            useMouseIcon = true;
+            soundSucceeded   = SoundDefOf.Designate_Haul;
+            useMouseIcon     = true;
             hasDesignateAllFloatMenuOption = true;
             designateAllLabel = "R4_RecycleLabel".Translate();
         }
@@ -58,9 +54,9 @@ namespace RRRR
 
         public override AcceptanceReport CanDesignateThing(Thing t)
         {
-            if (t.def == null || t.Map == null)
+            if (!R4WorkbenchFilterCache.IsR4Eligible(t.def))
                 return false;
-            if (!t.def.IsWeapon && !t.def.IsApparel)
+            if (t.Map == null)
                 return false;
             if (base.Map.designationManager.DesignationOn(t, Designation) != null)
                 return "R4_AlreadyDesignatedRecycle".Translate();
@@ -69,7 +65,13 @@ namespace RRRR
 
         public override void DesignateThing(Thing t)
         {
-            base.Map.designationManager.AddDesignation(new Designation(t, Designation));
+            var dm = base.Map.designationManager;
+            // Recycle cancels repair and clean
+            var repair = dm.DesignationOn(t, R4DefOf.R4_Repair);
+            if (repair != null) dm.RemoveDesignation(repair);
+            var clean = dm.DesignationOn(t, R4DefOf.R4_Clean);
+            if (clean != null) dm.RemoveDesignation(clean);
+            dm.AddDesignation(new Designation(t, Designation));
         }
 
         public override void SelectedUpdate()

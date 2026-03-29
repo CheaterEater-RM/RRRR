@@ -1,30 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LanguageData>
-  <!-- Recycle designator -->
+  <!-- Recycle designator (Orders menu / drag-designate) -->
   <R4_RecycleLabel>Recycle</R4_RecycleLabel>
   <R4_RecycleDesc>Designate items for recycling. A colonist will break them down at a workbench to recover materials.</R4_RecycleDesc>
   <R4_MustDesignateRecyclable>Must designate a recyclable item (weapon or apparel).</R4_MustDesignateRecyclable>
   <R4_AlreadyDesignatedRecycle>Already designated for recycling.</R4_AlreadyDesignatedRecycle>
 
-  <!-- Repair designator -->
+  <!-- Repair designator (Orders menu / drag-designate) -->
   <R4_RepairLabel>Repair</R4_RepairLabel>
-  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Items with minor damage (≤5%) are mended for free. Success depends on skill and tech level.</R4_RepairDesc>
+  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Items with minor damage (≤5%) are mended for free.</R4_RepairDesc>
   <R4_MustDesignateRepairable>Must designate a damaged weapon or apparel.</R4_MustDesignateRepairable>
   <R4_NotDamaged>Item is not damaged.</R4_NotDamaged>
   <R4_AlreadyDesignatedRepair>Already designated for repair.</R4_AlreadyDesignatedRepair>
 
-  <!-- Repair messages -->
-  <R4_RepairMinorFailure>{0} fumbled while repairing {1}. Minor damage.</R4_RepairMinorFailure>
-  <R4_RepairCriticalFailure>{0} badly botched repairing {1}! Quality degraded.</R4_RepairCriticalFailure>
-  <R4_RepairItemDestroyed>{0} was destroyed during a failed repair attempt.</R4_RepairItemDestroyed>
-  <R4_RepairNoMaterials>Not enough materials to continue repairing {0}.</R4_RepairNoMaterials>
-
-  <!-- Clean designator -->
+  <!-- Clean designator (Orders menu / drag-designate) -->
   <R4_CleanLabel>Clean taint</R4_CleanLabel>
   <R4_CleanDesc>Designate tainted apparel for cleaning. A colonist will remove the corpse taint at a workbench, consuming some materials.</R4_CleanDesc>
   <R4_MustDesignateTainted>Must designate tainted apparel.</R4_MustDesignateTainted>
   <R4_NotTainted>Apparel is not tainted.</R4_NotTainted>
   <R4_AlreadyDesignatedClean>Already designated for cleaning.</R4_AlreadyDesignatedClean>
+
+  <!-- Per-item gizmo cancel labels -->
+  <R4_CancelRecycleLabel>Cancel recycle</R4_CancelRecycleLabel>
+  <R4_CancelRepairLabel>Cancel repair</R4_CancelRepairLabel>
+  <R4_CancelCleanLabel>Cancel cleaning</R4_CancelCleanLabel>
+
+  <!-- Appended to tooltip when designation is already active -->
+  <R4_Desc_AlreadyDesignated>Already designated. Click to cancel.</R4_Desc_AlreadyDesignated>
+
+  <!-- Per-item gizmo description fragments -->
+  <R4_RecycleDesc_Short>Break down this item to recover materials at a workbench.</R4_RecycleDesc_Short>
+  <R4_RepairDesc_Short>Restore this item's HP at a workbench, consuming repair materials each cycle.</R4_RepairDesc_Short>
+  <R4_CleanDesc_Short>Remove corpse taint from this item at a workbench.</R4_CleanDesc_Short>
+
+  <R4_Desc_RecycleAt>Recycle at</R4_Desc_RecycleAt>
+  <R4_Desc_RepairAt>Repair at</R4_Desc_RepairAt>
+  <R4_Desc_CleanAt>Clean at</R4_Desc_CleanAt>
+  <R4_Desc_NoBench>no bench available</R4_Desc_NoBench>
+
+  <R4_Desc_EstimatedReturns>Estimated returns (skill {0}):</R4_Desc_EstimatedReturns>
+  <R4_Desc_Condition>Condition</R4_Desc_Condition>
+  <R4_Desc_CostPerCycle>Materials per repair cycle:</R4_Desc_CostPerCycle>
+  <R4_Desc_FreeCycles>No material cost.</R4_Desc_FreeCycles>
+  <R4_Desc_MinorMending>Minor damage — will be mended for free.</R4_Desc_MinorMending>
+  <R4_Desc_SuccessChance>Success chance at skill {0}: {1}</R4_Desc_SuccessChance>
+  <R4_Desc_CleanCost>Materials required:</R4_Desc_CleanCost>
+
+  <!-- Job report strings ({0} = item, {1} = bench) -->
+  <R4_JobReport_Repair>repairing {0} at {1}.</R4_JobReport_Repair>
+  <R4_JobReport_Clean>cleaning {0} at {1}.</R4_JobReport_Clean>
+
+  <!-- Repair outcome messages -->
+  <R4_RepairMinorFailure>{0} fumbled while repairing {1}. Minor damage.</R4_RepairMinorFailure>
+  <R4_RepairCriticalFailure>{0} badly botched repairing {1}! Quality degraded.</R4_RepairCriticalFailure>
+  <R4_RepairItemDestroyed>{0} was destroyed during a failed repair attempt.</R4_RepairItemDestroyed>
+  <R4_RepairNoMaterials>Not enough materials to continue repairing {0}.</R4_RepairNoMaterials>
   <R4_CleanNoMaterials>Not enough materials to clean {0}.</R4_CleanNoMaterials>
 
   <!-- Settings UI -->

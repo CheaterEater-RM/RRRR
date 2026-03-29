@@ -3,21 +3,24 @@
   <JobDef>
     <defName>RRRR_Recycle</defName>
     <driverClass>RRRR.JobDriver_R4Recycle</driverClass>
-    <reportString>recycling TargetA.</reportString>
+    <!-- TargetA = item, TargetB = bench for designation-based jobs -->
+    <reportString>recycling TargetA at TargetB.</reportString>
     <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
   </JobDef>
 
   <JobDef>
     <defName>RRRR_Repair</defName>
     <driverClass>RRRR.JobDriver_R4Repair</driverClass>
-    <reportString>repairing TargetA.</reportString>
+    <!-- Actual report string produced by JobDriver_R4Repair.GetReport() override -->
+    <reportString>repairing item at TargetA.</reportString>
     <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
   </JobDef>
 
   <JobDef>
     <defName>RRRR_Clean</defName>
     <driverClass>RRRR.JobDriver_R4Clean</driverClass>
-    <reportString>cleaning taint from TargetA.</reportString>
+    <!-- Actual report string produced by JobDriver_R4Clean.GetReport() override -->
+    <reportString>cleaning item at TargetA.</reportString>
     <allowOpportunisticPrefix>true</allowOpportunisticPrefix>
   </JobDef>
 </Defs>

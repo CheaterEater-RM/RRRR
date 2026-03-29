@@ -9,24 +9,24 @@ namespace RRRR
     /// <summary>
     /// Clean job using vanilla ingredient-gathering pattern.
     /// Works for both designation-based and bill-based cleaning.
-    /// 
+    ///
     /// Target layout (matches vanilla DoBill):
-    ///   TargetA = workbench
-    ///   TargetQueueA[0] = tainted apparel
-    ///   TargetQueueB = ingredient stacks
-    ///   TargetC = ingredient placement cell
+    ///   TargetA       = workbench
+    ///   TargetQueueA  = [tainted apparel]
+    ///   TargetQueueB  = ingredient stacks
+    ///   TargetC       = ingredient placement cell
     /// </summary>
     public class JobDriver_R4Clean : JobDriver
     {
-        private const TargetIndex BenchInd = TargetIndex.A;
+        private const TargetIndex BenchInd      = TargetIndex.A;
         private const TargetIndex IngredientInd = TargetIndex.B;
-        private const TargetIndex CellInd = TargetIndex.C;
+        private const TargetIndex CellInd       = TargetIndex.C;
 
         private float workLeft;
         private float totalWork;
 
-        private Thing Bench => job.GetTarget(BenchInd).Thing;
-        private bool IsBillDriven => job.bill != null;
+        private Thing Bench       => job.GetTarget(BenchInd).Thing;
+        private bool  IsBillDriven => job.bill != null;
 
         private Thing _cachedItem;
         private Thing CleanItem
@@ -35,13 +35,27 @@ namespace RRRR
             {
                 if (_cachedItem == null || _cachedItem.Destroyed)
                 {
-                    var queue = job.GetTargetQueue(BenchInd); // targetQueueA
+                    var queue = job.GetTargetQueue(BenchInd);
                     if (queue != null && queue.Count > 0)
                         _cachedItem = queue[0].Thing;
                 }
                 return _cachedItem;
             }
         }
+
+        // ── Report string ─────────────────────────────────────────────────────
+
+        public override string GetReport()
+        {
+            Thing item  = CleanItem;
+            Thing bench = Bench;
+            // Explicit string locals avoid CS8957 (TaggedString vs string ternary)
+            string itemLabel  = item  != null ? item.LabelShort  : "unknown".Translate().ToString();
+            string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
+            return "R4_JobReport_Clean".Translate(itemLabel, benchLabel);
+        }
+
+        // ── Reservations ──────────────────────────────────────────────────────
 
         public override bool TryMakePreToilReservations(bool errorOnFailed)
         {
@@ -63,7 +77,7 @@ namespace RRRR
         public override void ExposeData()
         {
             base.ExposeData();
-            Scribe_Values.Look(ref workLeft, "workLeft", 0f);
+            Scribe_Values.Look(ref workLeft,  "workLeft",  0f);
             Scribe_Values.Look(ref totalWork, "totalWork", 0f);
         }
 
@@ -71,17 +85,13 @@ namespace RRRR
         {
             this.FailOnDestroyedNullOrForbidden(BenchInd);
 
-            // Fail condition depends on whether bill or designation driven
             this.FailOn(delegate
             {
                 Thing item = CleanItem;
                 if (item == null || item.Destroyed)
                     return true;
-
                 if (IsBillDriven)
                     return job.bill.DeletedOrDereferenced || job.bill.suspended;
-
-                // Designation-driven: fail if designation removed
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean) == null)
                     return true;
                 return false;
@@ -101,7 +111,7 @@ namespace RRRR
                 yield return t;
             }
 
-            // ── Phase 2: Go to bench, then haul apparel ──
+            // ── Phase 2: Go to bench, haul apparel ──
             yield return gotoBillGiver;
 
             Toil gotoItem = ToilMaker.MakeToil("R4_Clean_GotoItem");
@@ -109,11 +119,7 @@ namespace RRRR
             gotoItem.initAction = delegate
             {
                 Thing item = CleanItem;
-                if (item == null || item.Destroyed)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
+                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 pawn.pather.StartPath(item, PathEndMode.ClosestTouch);
             };
             yield return gotoItem;
@@ -123,18 +129,12 @@ namespace RRRR
             carryItem.initAction = delegate
             {
                 Thing item = CleanItem;
-                if (item == null || item.Destroyed)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
+                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 if (pawn.carryTracker.CarriedThing == null)
                 {
                     int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
                     if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
-                    {
                         EndJobWith(JobCondition.Incompletable);
-                    }
                 }
             };
             yield return carryItem;
@@ -153,18 +153,14 @@ namespace RRRR
             // ── Phase 3: Work ──
             Toil workToil = ToilMaker.MakeToil("R4_Clean_Work");
             workToil.defaultCompleteMode = ToilCompleteMode.Never;
-            workToil.handlingFacing = true;
-            workToil.activeSkill = () => SkillDefOf.Crafting;
+            workToil.handlingFacing      = true;
+            workToil.activeSkill         = () => SkillDefOf.Crafting;
             workToil.FailOnCannotTouch(BenchInd, PathEndMode.InteractionCell);
 
             workToil.initAction = delegate
             {
                 Thing item = CleanItem;
-                if (item == null)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
+                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
                 float workToMake = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
                 if (workToMake <= 0f) workToMake = 1000f;
                 totalWork = Mathf.Clamp(workToMake * 0.15f, 300f, 1500f);
@@ -174,21 +170,17 @@ namespace RRRR
             workToil.tickAction = delegate
             {
                 pawn.rotationTracker.FaceTarget(Bench);
-                float speed = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
+                float speed       = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed,        true);
                 float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
-                int skillLevel = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-                float skillBonus = 1f + (skillLevel * 0.03f);
+                int skillLevel    = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+                float skillBonus  = 1f + (skillLevel * 0.03f);
                 workLeft -= speed * benchFactor * skillBonus;
                 pawn.skills?.Learn(SkillDefOf.Crafting, 0.08f);
-                if (workLeft <= 0f)
-                    ReadyForNextToil();
+                if (workLeft <= 0f) ReadyForNextToil();
             };
 
-            workToil.WithProgressBar(BenchInd, delegate
-            {
-                if (totalWork <= 0f) return 0f;
-                return 1f - (workLeft / totalWork);
-            });
+            workToil.WithProgressBar(BenchInd,
+                () => totalWork <= 0f ? 0f : 1f - (workLeft / totalWork));
 
             yield return workToil;
 
@@ -207,16 +199,10 @@ namespace RRRR
                 {
                     apparel.WornByCorpse = false;
                     apparel.Notify_ColorChanged();
-                    // Uncomment for debugging:
-                    // Log.Message($"[R4] Cleaned taint from: {apparel.LabelCap}");
                 }
 
-                // Notify bill if bill-driven
                 if (IsBillDriven)
-                {
-                    var ingredients = new List<Thing> { item };
-                    job.bill.Notify_IterationCompleted(pawn, ingredients);
-                }
+                    job.bill.Notify_IterationCompleted(pawn, new List<Thing> { item });
 
                 var des = pawn.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean);
                 if (des != null)
