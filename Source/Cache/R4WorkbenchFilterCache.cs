@@ -15,17 +15,25 @@ namespace RRRR
     /// RRRR RecipeDef's fixedIngredientFilter and ingredients[0].filter so that
     /// each bench's bills only show items that bench could have crafted.
     ///
-    /// Designation-based WorkGivers (WorkGiver_R4Repair/Recycle/Clean) use
-    /// WorkbenchRouter.GetValidBenches which reads recipeMaker.recipeUsers directly
-    /// and is unaffected by these filters.
+    /// Also builds BenchWorkTypes: bench ThingDef → WorkTypeDef, used by
+    /// designation WorkGivers to filter candidates by the current pawn's work type.
     /// </summary>
     public static class R4WorkbenchFilterCache
     {
-        // ── Public data (WorkbenchRouter fallback reads this) ──────────────────
+        // ── Public data ────────────────────────────────────────────────────────
 
         /// <summary>bench ThingDef → set of R4-eligible items it can craft.</summary>
         public static readonly Dictionary<ThingDef, HashSet<ThingDef>> BenchCraftables
             = new Dictionary<ThingDef, HashSet<ThingDef>>();
+
+        /// <summary>
+        /// bench ThingDef → the WorkTypeDef that services it.
+        /// Built by scanning all WorkGiverDefs with fixedBillGiverDefs.
+        /// Used by designation WorkGivers so they only accept items whose
+        /// target bench matches the WorkGiver's own workType.
+        /// </summary>
+        public static readonly Dictionary<ThingDef, WorkTypeDef> BenchWorkTypes
+            = new Dictionary<ThingDef, WorkTypeDef>();
 
         // ── Entry point ────────────────────────────────────────────────────────
 
@@ -37,11 +45,35 @@ namespace RRRR
         public static void Build()
         {
             BenchCraftables.Clear();
+            BenchWorkTypes.Clear();
 
+            BuildBenchWorkTypes();
             BuildFromRecipeMakers();
             AssignFallbacks();
             PatchRecipeFilters();
             LogSummary();
+        }
+
+        // ── Step 0: bench → WorkTypeDef map ───────────────────────────────────
+
+        static void BuildBenchWorkTypes()
+        {
+            // Scan all WorkGiverDefs that list specific benches via fixedBillGiverDefs.
+            // This covers both vanilla and modded benches automatically.
+            foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
+            {
+                if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
+                if (wg.workType == null) continue;
+
+                foreach (ThingDef bench in wg.fixedBillGiverDefs)
+                {
+                    // First registration wins; don't overwrite if already mapped
+                    if (!BenchWorkTypes.ContainsKey(bench))
+                        BenchWorkTypes[bench] = wg.workType;
+                }
+            }
+
+            Log.Message($"[R4] BenchWorkTypes: {BenchWorkTypes.Count} benches mapped.");
         }
 
         // ── Step 1: invert recipeMaker.recipeUsers ─────────────────────────────
@@ -97,7 +129,6 @@ namespace RRRR
             ThingDef machining      = DefDatabase<ThingDef>.GetNamedSilentFail("TableMachining");
             ThingDef fabrication    = DefDatabase<ThingDef>.GetNamedSilentFail("FabricationBench");
 
-            // Prefer electric smithy; fall back to fueled
             ThingDef smithy = electricSmithy ?? fueledSmithy;
 
             return new Dictionary<TechLevel, ThingDef>
@@ -117,7 +148,6 @@ namespace RRRR
         {
             if (map.TryGetValue(item.techLevel, out ThingDef bench) && bench != null)
                 return bench;
-            // Hard fallback: machining table handles unknowns
             return DefDatabase<ThingDef>.GetNamedSilentFail("TableMachining");
         }
 
@@ -137,7 +167,6 @@ namespace RRRR
 
                 if (recipe.recipeUsers == null || recipe.recipeUsers.Count == 0) continue;
 
-                // Union craftable sets for every bench this recipe is on
                 var allowed = new HashSet<ThingDef>();
                 foreach (ThingDef bench in recipe.recipeUsers)
                 {
@@ -145,7 +174,6 @@ namespace RRRR
                         allowed.UnionWith(craftables);
                 }
 
-                // Clean bills: only apparel (weapons can't be tainted)
                 if (recipe.workerClass == cleanType)
                     allowed.RemoveWhere(d => !d.IsApparel);
 
@@ -155,7 +183,6 @@ namespace RRRR
                     continue;
                 }
 
-                // Build ThingFilter from the allowed set
                 recipe.fixedIngredientFilter = BuildFilter(allowed);
 
                 if (recipe.ingredients != null && recipe.ingredients.Count > 0)
@@ -171,6 +198,22 @@ namespace RRRR
             foreach (ThingDef td in defs)
                 filter.SetAllow(td, true);
             return filter;
+        }
+
+        // ── Public helpers ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns true if any of the given bench defs are serviced by the
+        /// given work type. Used by designation WorkGivers to filter candidates.
+        /// </summary>
+        public static bool AnyBenchMatchesWorkType(IEnumerable<ThingDef> benchDefs, WorkTypeDef workType)
+        {
+            foreach (ThingDef bench in benchDefs)
+            {
+                if (BenchWorkTypes.TryGetValue(bench, out WorkTypeDef wt) && wt == workType)
+                    return true;
+            }
+            return false;
         }
 
         // ── Eligibility predicate ──────────────────────────────────────────────

@@ -2,47 +2,124 @@
 <Defs>
   <!-- ═══════════════════════════════════════════════════════════ -->
   <!-- DESIGNATION-BASED WORK                                      -->
-  <!-- These scan for player-designated items and route them to    -->
-  <!-- the appropriate bench via WorkbenchRouter.GetValidBenches.  -->
+  <!--                                                             -->
+  <!-- Each action (recycle, repair, clean) is registered under    -->
+  <!-- three WorkGiverDefs — Crafting, Smithing, Tailoring — so   -->
+  <!-- the work tab column matches the bench the item will go to.  -->
+  <!--                                                             -->
+  <!-- The shared WorkGiver_R4DesignationBase.FindBench filters    -->
+  <!-- candidates to only benches whose WorkTypeDef matches the    -->
+  <!-- WorkGiver's own def.workType, so a Smithing pawn only picks -->
+  <!-- up smithy items and a Tailoring pawn only tailor items.     -->
+  <!--                                                             -->
+  <!-- Items craftable at multiple bench types appear under        -->
+  <!-- multiple columns; the pawn with the highest-priority        -->
+  <!-- enabled column wins.                                        -->
   <!-- ═══════════════════════════════════════════════════════════ -->
 
+  <!-- ─── RECYCLE ─────────────────────────────────────────────── -->
+
   <WorkGiverDef>
-    <defName>RRRR_Recycle</defName>
-    <label>recycle designated items</label>
+    <defName>RRRR_Recycle_Crafting</defName>
+    <label>recycle items (craft)</label>
     <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
     <workType>Crafting</workType>
     <priorityInType>50</priorityInType>
     <verb>recycle</verb>
     <gerund>recycling designated items</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
   </WorkGiverDef>
 
   <WorkGiverDef>
-    <defName>RRRR_Repair</defName>
-    <label>repair designated items</label>
+    <defName>RRRR_Recycle_Smithing</defName>
+    <label>recycle items (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>50</priorityInType>
+    <verb>recycle</verb>
+    <gerund>recycling designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Recycle_Tailoring</defName>
+    <label>recycle items (tailor)</label>
+    <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>50</priorityInType>
+    <verb>recycle</verb>
+    <gerund>recycling designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <!-- ─── REPAIR ──────────────────────────────────────────────── -->
+
+  <WorkGiverDef>
+    <defName>RRRR_Repair_Crafting</defName>
+    <label>repair items (craft)</label>
     <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
     <workType>Crafting</workType>
     <priorityInType>55</priorityInType>
     <verb>repair</verb>
     <gerund>repairing designated items</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
   </WorkGiverDef>
 
   <WorkGiverDef>
-    <defName>RRRR_Clean</defName>
-    <label>clean tainted apparel</label>
+    <defName>RRRR_Repair_Smithing</defName>
+    <label>repair items (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>55</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Repair_Tailoring</defName>
+    <label>repair items (tailor)</label>
+    <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>55</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <!-- ─── CLEAN ───────────────────────────────────────────────── -->
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Crafting</defName>
+    <label>clean tainted apparel (craft)</label>
     <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
     <workType>Crafting</workType>
     <priorityInType>45</priorityInType>
     <verb>clean</verb>
     <gerund>cleaning tainted apparel</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Smithing</defName>
+    <label>clean tainted apparel (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Tailoring</defName>
+    <label>clean tainted apparel (tailor)</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
   </WorkGiverDef>
 
   <!-- ═══════════════════════════════════════════════════════════ -->
@@ -69,9 +146,7 @@
     </fixedBillGiverDefs>
     <verb>repair at</verb>
     <gerund>repairing items at crafting spot</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
@@ -88,9 +163,7 @@
     </fixedBillGiverDefs>
     <verb>repair at</verb>
     <gerund>repairing items at tailor bench</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
@@ -107,9 +180,7 @@
     </fixedBillGiverDefs>
     <verb>repair at</verb>
     <gerund>repairing items at smithy</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
@@ -125,9 +196,7 @@
     </fixedBillGiverDefs>
     <verb>repair at</verb>
     <gerund>repairing items at machining table</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
@@ -143,9 +212,7 @@
     </fixedBillGiverDefs>
     <verb>repair at</verb>
     <gerund>repairing items at fabrication bench</gerund>
-    <requiredCapacities>
-      <li>Manipulation</li>
-    </requiredCapacities>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
     <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
