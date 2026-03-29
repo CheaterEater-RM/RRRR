@@ -7,6 +7,11 @@ namespace RRRR
     /// <summary>
     /// Map-order designator for repairing damaged items.
     /// Supports click and drag-to-designate. Can coexist with R4_Clean.
+    ///
+    /// icon          → menu button texture (UI/Designators/R4RepairMenu)
+    /// DesignationDef.texturePath → in-map overlay (UI/Designators/R4RepairDesignation)
+    /// These are intentionally separate: the menu icon is descriptive, the
+    /// overlay is minimal so it doesn't obscure the item beneath.
     /// </summary>
     public class Designator_RepairThing : Designator
     {
@@ -18,9 +23,8 @@ namespace RRRR
         {
             defaultLabel = "R4_RepairLabel".Translate();
             defaultDesc = "R4_RepairDesc".Translate();
-            icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RepairDesignation", reportFailure: false);
-            if (icon == null)
-                icon = ContentFinder<Texture2D>.Get("UI/Designators/Claim", reportFailure: true);
+            icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RepairMenu", reportFailure: false)
+                ?? ContentFinder<Texture2D>.Get("UI/Designators/Claim", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;
             soundDragChanged = SoundDefOf.Designate_DragStandard_Changed;
             soundSucceeded = SoundDefOf.Designate_Haul;

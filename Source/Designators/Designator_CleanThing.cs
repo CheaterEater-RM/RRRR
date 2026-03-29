@@ -7,6 +7,11 @@ namespace RRRR
     /// <summary>
     /// Map-order designator for cleaning taint from apparel.
     /// Supports click and drag-to-designate. Can coexist with R4_Repair.
+    ///
+    /// icon          → menu button texture (UI/Designators/R4CleanMenu)
+    /// DesignationDef.texturePath → in-map overlay (UI/Designators/R4CleanDesignation)
+    /// These are intentionally separate: the menu icon is descriptive, the
+    /// overlay is minimal so it doesn't obscure the item beneath.
     /// </summary>
     public class Designator_CleanThing : Designator
     {
@@ -18,9 +23,8 @@ namespace RRRR
         {
             defaultLabel = "R4_CleanLabel".Translate();
             defaultDesc = "R4_CleanDesc".Translate();
-            icon = ContentFinder<Texture2D>.Get("UI/Designators/R4CleanDesignation", reportFailure: false);
-            if (icon == null)
-                icon = ContentFinder<Texture2D>.Get("UI/Designators/Unforbid", reportFailure: true);
+            icon = ContentFinder<Texture2D>.Get("UI/Designators/R4CleanMenu", reportFailure: false)
+                ?? ContentFinder<Texture2D>.Get("UI/Designators/Unforbid", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;
             soundDragChanged = SoundDefOf.Designate_DragStandard_Changed;
             soundSucceeded = SoundDefOf.Designate_Haul;
