@@ -60,6 +60,7 @@
   <!-- Settings UI -->
   <R4_Settings_RecycleHeader>Recycle Settings</R4_Settings_RecycleHeader>
   <R4_Settings_RecycleMult>Material return multiplier</R4_Settings_RecycleMult>
+  <R4_Settings_RecycleMult_Tip>Scales all recycled material yields. 100% = default. Higher values return more materials; lower values return less.</R4_Settings_RecycleMult_Tip>
   <R4_Settings_SkipIntricate>Skip intricate components</R4_Settings_SkipIntricate>
   <R4_Settings_SkipIntricate_Tip>If enabled, intricate components are excluded from recycle returns.</R4_Settings_SkipIntricate_Tip>
 

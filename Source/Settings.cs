@@ -109,8 +109,9 @@ namespace RRRR
             listing.GapLine();
 
             listing.Label("R4_Settings_RecycleMult".Translate()
-                + $": {Settings.recycleGlobalMult:P0}");
-            Settings.recycleGlobalMult = listing.Slider(Settings.recycleGlobalMult, 0.1f, 2.0f);
+                + $": {Settings.recycleGlobalMult:P0}",
+                tooltip: "R4_Settings_RecycleMult_Tip".Translate());
+            Settings.recycleGlobalMult = Mathf.Round(listing.Slider(Settings.recycleGlobalMult, 0.1f, 2.0f) * 100f) / 100f;
 
             listing.CheckboxLabeled(
                 "R4_Settings_SkipIntricate".Translate(),
@@ -129,7 +130,7 @@ namespace RRRR
                 + "  ("
                 + "R4_Settings_RepairCyclesNote".Translate(cycles)
                 + ")");
-            Settings.repairHpPerCycle = listing.Slider(Settings.repairHpPerCycle, 0.05f, 0.50f);
+            Settings.repairHpPerCycle = Mathf.Round(listing.Slider(Settings.repairHpPerCycle, 0.05f, 0.50f) * 100f) / 100f;
 
             listing.Gap();
 
@@ -139,7 +140,7 @@ namespace RRRR
 
             listing.Label("R4_Settings_CleanCostFraction".Translate()
                 + $": {Settings.cleanCostFraction:P0}");
-            Settings.cleanCostFraction = listing.Slider(Settings.cleanCostFraction, 0.05f, 0.50f);
+            Settings.cleanCostFraction = Mathf.Round(listing.Slider(Settings.cleanCostFraction, 0.05f, 0.50f) * 100f) / 100f;
 
             listing.Gap();
 
