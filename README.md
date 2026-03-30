@@ -28,11 +28,6 @@ R4 replaces the vanilla SmeltWeapon and SmeltApparel recipes on the electric sme
 
 R4 is safe to add or remove from an ongoing save. It does not add custom components to items or maps. On removal, any pending R4 designations and bills are cleaned up automatically. You may need to re-add vanilla smelting bills to your smelters after uninstalling.
 
-## Requirements
-
-- RimWorld 1.6+
-- [Harmony](https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077)
-
 ## License
 
 MIT
