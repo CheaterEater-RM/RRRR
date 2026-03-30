@@ -331,20 +331,21 @@ namespace RRRR
 
             var recipe = new RecipeDef
             {
-                defName               = defName,
-                label                 = template.label,
-                description           = template.description,
-                jobString             = template.jobString,
-                workAmount            = template.workAmount,
-                workSpeedStat         = template.workSpeedStat,
-                workSkill             = template.workSkill,
-                effectWorking         = template.effectWorking,
-                soundWorking          = template.soundWorking,
-                workerClass           = template.workerClass,
-                requiredGiverWorkType = template.requiredGiverWorkType,
-                ingredients           = clonedIngredients,
-                fixedIngredientFilter = new ThingFilter(), // rebuilt by PatchRecipeFilters
-                recipeUsers           = new List<ThingDef> { bench },
+                defName                 = defName,
+                label                   = template.label,
+                description             = template.description,
+                jobString               = template.jobString,
+                workAmount              = template.workAmount,
+                workSpeedStat           = template.workSpeedStat,
+                workSkill               = template.workSkill,
+                effectWorking           = template.effectWorking,
+                soundWorking            = template.soundWorking,
+                workerClass             = template.workerClass,
+                requiredGiverWorkType   = template.requiredGiverWorkType,
+                ingredients             = clonedIngredients,
+                fixedIngredientFilter   = new ThingFilter(), // rebuilt by PatchRecipeFilters
+                defaultIngredientFilter = new ThingFilter(), // must be non-null; synced by PatchRecipeFilters
+                recipeUsers             = new List<ThingDef> { bench },
             };
 
             recipe.ResolveDefNameHash();
@@ -416,7 +417,13 @@ namespace RRRR
                     continue;
                 }
 
-                recipe.fixedIngredientFilter = BuildFilter(allowed);
+                ThingFilter finalFilter = BuildFilter(allowed);
+                recipe.fixedIngredientFilter   = finalFilter;
+                // defaultIngredientFilter is what Bill..ctor copies into the new bill's
+                // ingredientFilter via CopyAllowancesFrom. It must match fixedIngredientFilter
+                // exactly — for XML-defined recipes ResolveReferences built it from the empty
+                // placeholder before we stamped the real filter, so we always overwrite it here.
+                recipe.defaultIngredientFilter = BuildFilter(allowed);
                 if (recipe.ingredients != null && recipe.ingredients.Count > 0)
                     recipe.ingredients[0].filter = BuildFilter(allowed);
 
