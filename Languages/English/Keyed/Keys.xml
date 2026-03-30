@@ -14,7 +14,7 @@
   <R4_AlreadyDesignatedRepair>Already designated for repair.</R4_AlreadyDesignatedRepair>
 
   <!-- Clean designator (Orders menu / drag-designate) -->
-  <R4_CleanLabel>Clean taint</R4_CleanLabel>
+  <R4_CleanLabel>Clean</R4_CleanLabel>
   <R4_CleanDesc>Designate tainted apparel for cleaning. A colonist will remove the corpse taint at a workbench, consuming some materials.</R4_CleanDesc>
   <R4_MustDesignateTainted>Must designate tainted apparel.</R4_MustDesignateTainted>
   <R4_NotTainted>Apparel is not tainted.</R4_NotTainted>
