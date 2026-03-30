@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>R4: Rimworld Reduce, Reuse, and Recycle</name>
+  <name>R⁴</name>
   <author>CheaterEater</author>
   <packageId>CheaterEater.RRRR</packageId>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
-  <description>Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
+  <description>R⁴:Rimworld Reduce, Reuse, and Recycle. Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
   <modVersion>1.0</modVersion>
 
   <modDependencies>

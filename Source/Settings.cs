@@ -70,7 +70,7 @@ namespace RRRR
             base.ExposeData();
             Scribe_Values.Look(ref debugLogging,            "debugLogging",            false);
             Scribe_Values.Look(ref recycleGlobalMult,       "recycleGlobalMult",       1.0f);
-            Scribe_Values.Look(ref skipIntricateComponents, "skipIntricateComponents", true);
+            Scribe_Values.Look(ref skipIntricateComponents, "skipIntricateComponents", false);
             Scribe_Values.Look(ref repairHpPerCycle,        "repairHpPerCycle",        0.20f);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
         }
@@ -79,7 +79,7 @@ namespace RRRR
         {
             debugLogging            = false;
             recycleGlobalMult       = 1.0f;
-            skipIntricateComponents = true;
+            skipIntricateComponents = false;
             repairHpPerCycle        = 0.20f;
             cleanCostFraction       = 0.20f;
         }
@@ -97,7 +97,7 @@ namespace RRRR
             Settings = GetSettings<RRRR_Settings>();
         }
 
-        public override string SettingsCategory() => "R4: Reduce, Reuse, Recycle, Repair";
+        public override string SettingsCategory() => "R⁴: Rimworld Reduce, Reuse, Recycle";
 
         public override void DoSettingsWindowContents(Rect inRect)
         {
