@@ -7,7 +7,7 @@
     <li>1.6</li>
   </supportedVersions>
   <description>R⁴:Rimworld Reduce, Reuse, and Recycle. Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
-  <modVersion>1.0</modVersion>
+  <modVersion>1.1</modVersion>
 
   <modDependencies>
     <li>

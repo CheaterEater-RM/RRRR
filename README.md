@@ -20,6 +20,8 @@ Alternatively, set up standing bills at workbenches for automated processing —
 
 **Workbench routing** is automatic: items go to the bench that originally crafted them. Items without a known crafting source (loot, quest rewards) are routed by tech level.
 
+Known outliers that should never be treated as R4 gear can be excluded centrally in `1.6/Defs/EligibilityExclusions.xml`.
+
 ## Vanilla Smelting
 
 R4 replaces the vanilla SmeltWeapon and SmeltApparel recipes on the electric smelter with its own skill-based recycling bills. The Destroy recipes and ExtractMetalFromSlag are unaffected.

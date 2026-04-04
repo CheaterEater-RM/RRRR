@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <Def Class="RRRR.R4EligibilityExclusionDef">
+    <defName>RRRR_DefaultEligibilityExclusions</defName>
+    <excludedThingDefs>
+      <li>Beer</li>
+      <li>WoodLog</li>
+    </excludedThingDefs>
+  </Def>
+
+</Defs>

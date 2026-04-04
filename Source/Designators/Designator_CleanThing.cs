@@ -7,7 +7,7 @@ namespace RRRR
     /// <summary>
     /// Map-order designator for cleaning tainted apparel (Orders menu / drag-designate).
     /// Clean cancels any pending recycle designation.
-    /// Uses IsR4Eligible to match the same eligibility as the gizmo system.
+    /// Uses clean-specific eligibility to match the gizmo and bill systems.
     /// </summary>
     public class Designator_CleanThing : Designator
     {
@@ -54,7 +54,7 @@ namespace RRRR
 
         public override AcceptanceReport CanDesignateThing(Thing t)
         {
-            if (!R4WorkbenchFilterCache.IsR4Eligible(t.def))
+            if (!R4WorkbenchFilterCache.IsCleanEligible(t.def))
                 return false;
             if (t.Map == null)
                 return false;

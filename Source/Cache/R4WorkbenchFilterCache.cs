@@ -34,13 +34,20 @@ namespace RRRR
     {
         // ── Public data ────────────────────────────────────────────────────────
 
-        /// <summary>bench ThingDef → set of R4-eligible items it can craft.</summary>
+        /// <summary>
+        /// bench ThingDef → set of R4-routable gear items it can craft.
+        /// This is the broad bench-routing superset; per-operation filters narrow
+        /// it further for recycle, repair, and clean bills.
+        /// </summary>
         public static readonly Dictionary<ThingDef, HashSet<ThingDef>> BenchCraftables
             = new Dictionary<ThingDef, HashSet<ThingDef>>();
 
         /// <summary>bench ThingDef → canonical WorkTypeDef servicing it.</summary>
         public static readonly Dictionary<ThingDef, WorkTypeDef> BenchWorkTypes
             = new Dictionary<ThingDef, WorkTypeDef>();
+
+        private static readonly HashSet<ThingDef> ExplicitlyExcludedItems
+            = new HashSet<ThingDef>();
 
         // Vanilla smelter recipes we always strip from any bench that has them.
         private static readonly HashSet<string> SmelterRecipesToStrip = new HashSet<string>
@@ -61,7 +68,9 @@ namespace RRRR
         {
             BenchCraftables.Clear();
             BenchWorkTypes.Clear();
+            ExplicitlyExcludedItems.Clear();
 
+            BuildEligibilityExclusions();
             StripSmelterRecipes();
             BuildBenchWorkTypes();
             BuildFromRecipeMakers();
@@ -72,6 +81,24 @@ namespace RRRR
 
             R4Log.Debug($"Cache built: {BenchCraftables.Count} benches, " +
                         $"{BenchCraftables.Values.Sum(s => s.Count)} item-bench mappings.");
+        }
+
+        static void BuildEligibilityExclusions()
+        {
+            foreach (R4EligibilityExclusionDef exclusionDef in DefDatabase<R4EligibilityExclusionDef>.AllDefsListForReading)
+            {
+                if (exclusionDef.excludedThingDefs == null) continue;
+
+                for (int i = 0; i < exclusionDef.excludedThingDefs.Count; i++)
+                {
+                    ThingDef thingDef = exclusionDef.excludedThingDefs[i];
+                    if (thingDef != null)
+                        ExplicitlyExcludedItems.Add(thingDef);
+                }
+            }
+
+            if (ExplicitlyExcludedItems.Count > 0)
+                R4Log.Debug($"Loaded {ExplicitlyExcludedItems.Count} explicit R4 eligibility exclusion(s).");
         }
 
         // ── Step -1: strip smelter recipes from all benches ───────────────────
@@ -289,7 +316,7 @@ namespace RRRR
                 if (!typeof(Building_WorkTable).IsAssignableFrom(bench.thingClass)) continue;
                 if (bench.inspectorTabs == null || !bench.inspectorTabs.Contains(typeof(ITab_Bills))) continue;
 
-                bool hasApparel = kvp.Value.Any(d => d.IsApparel);
+                bool hasClean   = kvp.Value.Any(IsCleanEligible);
                 string safeName = bench.defName.Replace(" ", "_");
 
                 // Inject repair bill
@@ -297,7 +324,7 @@ namespace RRRR
                 // Inject recycle bill
                 InjectRecipeDef(recycleTemplate, $"RRRR_Recycle_Mod_{safeName}", bench, bench.recipes);
                 // Inject clean bill if bench has apparel items
-                if (hasApparel)
+                if (hasClean)
                     InjectRecipeDef(cleanTemplate, $"RRRR_Clean_Mod_{safeName}", bench, bench.recipes);
 
                 // Inject a WorkGiverDef for the repair bill pipeline
@@ -408,8 +435,12 @@ namespace RRRR
                         allowed.UnionWith(craftables);
                 }
 
-                if (recipe.workerClass == cleanType)
-                    allowed.RemoveWhere(d => !d.IsApparel);
+                if (recipe.workerClass == repairType)
+                    allowed.RemoveWhere(d => !IsRepairEligible(d));
+                else if (recipe.workerClass == recycleType)
+                    allowed.RemoveWhere(d => !IsRecycleEligible(d));
+                else
+                    allowed.RemoveWhere(d => !IsCleanEligible(d));
 
                 if (allowed.Count == 0)
                 {
@@ -451,13 +482,26 @@ namespace RRRR
 
         // ── Eligibility predicate ──────────────────────────────────────────────
 
+        static bool IsGear(ThingDef def)
+        {
+            return def != null &&
+                   def.useHitPoints &&
+                   (def.IsWeapon || def.IsApparel) &&
+                   !ExplicitlyExcludedItems.Contains(def);
+        }
+
         /// <summary>
-        /// An item is R4-eligible if it uses hit points, is a weapon or apparel,
-        /// and is smeltable (excludes improvised-weapon items like beer and wood logs).
+        /// Broad R4 routing predicate used for shared bench discovery.
+        /// Per-operation entry points should use IsRepairEligible,
+        /// IsRecycleEligible, or IsCleanEligible instead.
         /// </summary>
-        public static bool IsR4Eligible(ThingDef def) =>
-            def.useHitPoints &&
-            (def.IsWeapon || def.IsApparel) &&
-            def.smeltable;
+        public static bool IsR4Eligible(ThingDef def) => IsGear(def);
+
+        public static bool IsRepairEligible(ThingDef def) => IsGear(def);
+
+        public static bool IsRecycleEligible(ThingDef def) => IsGear(def);
+
+        public static bool IsCleanEligible(ThingDef def) =>
+            def != null && def.useHitPoints && def.IsApparel;
     }
 }

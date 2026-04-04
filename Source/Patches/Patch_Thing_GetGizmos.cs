@@ -8,8 +8,8 @@ using Verse;
 namespace RRRR
 {
     /// <summary>
-    /// Postfix on Thing.GetGizmos to inject per-item R4 action gizmos when a
-    /// weapon or apparel is selected. Uses Command_Action for dynamic per-item
+    /// Postfix on Thing.GetGizmos to inject per-item R4 action gizmos when an
+    /// R4-eligible item is selected. Uses Command_Action for dynamic per-item
     /// descriptions showing bench routing, material costs, and success chance.
     ///
     /// Mutual exclusivity (silent toggle, no locking):
@@ -20,8 +20,9 @@ namespace RRRR
     ///
     ///   Repair and Clean can coexist (a tainted damaged item may need both).
     ///
-    /// Eligibility uses IsR4Eligible, which requires smeltable=true, excluding
-    /// improvised-weapon items like beer and wood logs.
+    /// Each action uses its own eligibility predicate. Repair applies to any
+    /// gear item with hit points; recycle additionally requires reclaimable
+    /// outputs; clean is apparel-only.
     ///
     /// All cost/success estimates assume Crafting skill 10, stated explicitly.
     /// </summary>
@@ -32,7 +33,11 @@ namespace RRRR
 
         static void Postfix(Thing __instance, ref IEnumerable<Gizmo> __result)
         {
-            if (!R4WorkbenchFilterCache.IsR4Eligible(__instance.def))
+            bool canRecycle = R4WorkbenchFilterCache.IsRecycleEligible(__instance.def);
+            bool canRepair  = R4WorkbenchFilterCache.IsRepairEligible(__instance.def);
+            bool canClean   = R4WorkbenchFilterCache.IsCleanEligible(__instance.def);
+
+            if (!canRecycle && !canRepair && !canClean)
                 return;
             if (__instance.Map == null)
                 return;
@@ -46,9 +51,12 @@ namespace RRRR
             var extra = new List<Gizmo>();
             DesignationManager dm = __instance.Map.designationManager;
 
-            BuildRecycleGizmo(__instance, dm, extra);
-            BuildRepairGizmo(__instance, dm, extra);
-            BuildCleanGizmo(__instance, dm, extra);
+            if (canRecycle)
+                BuildRecycleGizmo(__instance, dm, extra);
+            if (canRepair)
+                BuildRepairGizmo(__instance, dm, extra);
+            if (canClean)
+                BuildCleanGizmo(__instance, dm, extra);
 
             if (extra.Count == 0)
                 return;

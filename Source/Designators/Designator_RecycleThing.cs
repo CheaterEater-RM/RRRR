@@ -7,7 +7,7 @@ namespace RRRR
     /// <summary>
     /// Map-order designator for recycling items (Orders menu / drag-designate).
     /// Recycle is mutually exclusive with Repair and Clean.
-    /// Uses IsR4Eligible to match the same eligibility as the gizmo system.
+    /// Uses recycle-specific eligibility to match the gizmo and bill systems.
     /// </summary>
     public class Designator_RecycleThing : Designator
     {
@@ -54,7 +54,7 @@ namespace RRRR
 
         public override AcceptanceReport CanDesignateThing(Thing t)
         {
-            if (!R4WorkbenchFilterCache.IsR4Eligible(t.def))
+            if (!R4WorkbenchFilterCache.IsRecycleEligible(t.def))
                 return false;
             if (t.Map == null)
                 return false;

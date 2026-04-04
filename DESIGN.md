@@ -73,7 +73,7 @@ Bill-based repair uses per-bench `WorkGiver_R4RepairBill` defs with `fixedBillGi
 
 **Fallback** (for items without `recipeMaker`, e.g. quest rewards, trader goods, loot): Route by `techLevel` to an appropriate bench (Animal/Neolithic→CraftingSpot, Medieval→Smithy, Industrial→Machining, Spacer+→Fabrication). Last resort → machinining table.
 
-**Eligibility:** Items must pass `IsR4Eligible`: `useHitPoints && (IsWeapon || IsApparel) && smeltable`. The `smeltable` check excludes turret internal components and other non-gear items.
+**Eligibility:** Bench routing uses a broad gear predicate: `useHitPoints && (IsWeapon || IsApparel)`. Repair and recycle both use that same check. Clean uses the apparel subset of that rule. `smeltable` is not used for R4 eligibility. Explicit exclusions live in `1.6/Defs/EligibilityExclusions.xml` so outliers can be blocked without hardcoding them into the predicate.
 
 `R4WorkbenchFilterCache` builds all mappings at startup:
 1. Inverts `recipeMaker.recipeUsers` → `BenchCraftables[bench] = {items}`
