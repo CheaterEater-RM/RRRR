@@ -35,6 +35,12 @@ namespace RRRR
         /// </summary>
         public float repairHpPerCycle = 0.20f;
 
+        /// <summary>
+        /// HP fraction at or above which damage is considered minor and is
+        /// mended for free without consuming repair materials.
+        /// </summary>
+        public float minorMendingThreshold = 0.95f;
+
         // ── Clean ─────────────────────────────────────────────────────────────
         /// <summary>
         /// Material cost for one cleaning operation as a fraction of make cost.
@@ -72,6 +78,7 @@ namespace RRRR
             Scribe_Values.Look(ref recycleGlobalMult,       "recycleGlobalMult",       1.0f);
             Scribe_Values.Look(ref skipIntricateComponents, "skipIntricateComponents", false);
             Scribe_Values.Look(ref repairHpPerCycle,        "repairHpPerCycle",        0.20f);
+            Scribe_Values.Look(ref minorMendingThreshold,   "minorMendingThreshold",   0.95f);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
         }
 
@@ -81,6 +88,7 @@ namespace RRRR
             recycleGlobalMult       = 1.0f;
             skipIntricateComponents = false;
             repairHpPerCycle        = 0.20f;
+            minorMendingThreshold   = 0.95f;
             cleanCostFraction       = 0.20f;
         }
     }
@@ -131,6 +139,11 @@ namespace RRRR
                 + "R4_Settings_RepairCyclesNote".Translate(cycles)
                 + ")");
             Settings.repairHpPerCycle = Mathf.Round(listing.Slider(Settings.repairHpPerCycle, 0.05f, 0.50f) * 100f) / 100f;
+
+            listing.Label("R4_Settings_MinorMendingThreshold".Translate()
+                + $": {Settings.minorMendingThreshold:P0}",
+                tooltip: "R4_Settings_MinorMendingThreshold_Tip".Translate());
+            Settings.minorMendingThreshold = Mathf.Round(listing.Slider(Settings.minorMendingThreshold, 0.70f, 1.00f) * 100f) / 100f;
 
             listing.Gap();
 

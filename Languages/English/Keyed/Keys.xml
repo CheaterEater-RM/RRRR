@@ -8,7 +8,7 @@
 
   <!-- Repair designator (Orders menu / drag-designate) -->
   <R4_RepairLabel>Repair</R4_RepairLabel>
-  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Items with minor damage (≤5%) are mended for free.</R4_RepairDesc>
+  <R4_RepairDesc>Designate damaged items for repair. A colonist will restore HP at a workbench, consuming materials. Items with minor damage are mended for free.</R4_RepairDesc>
   <R4_MustDesignateRepairable>Must designate a damaged weapon or apparel.</R4_MustDesignateRepairable>
   <R4_NotDamaged>Item is not damaged.</R4_NotDamaged>
   <R4_AlreadyDesignatedRepair>Already designated for repair.</R4_AlreadyDesignatedRepair>
@@ -66,6 +66,8 @@
 
   <R4_Settings_RepairHeader>Repair Settings</R4_Settings_RepairHeader>
   <R4_Settings_RepairHpPerCycle>HP restored per cycle</R4_Settings_RepairHpPerCycle>
+  <R4_Settings_MinorMendingThreshold>Minor mending threshold</R4_Settings_MinorMendingThreshold>
+  <R4_Settings_MinorMendingThreshold_Tip>Items at or above this HP fraction are repaired for free without consuming repair materials.</R4_Settings_MinorMendingThreshold_Tip>
   <R4_Settings_RepairCyclesNote>{0} cycles to fully repair</R4_Settings_RepairCyclesNote>
 
   <R4_Settings_CleanHeader>Clean Settings</R4_Settings_CleanHeader>

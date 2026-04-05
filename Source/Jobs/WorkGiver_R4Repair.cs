@@ -15,7 +15,7 @@ namespace RRRR
         /// Items at or above this HP fraction are minor damage and can be
         /// mended for free without consuming any materials.
         /// </summary>
-        public const float MinorMendingThreshold = 0.95f;
+        public static float MinorMendingThreshold => RRRR_Mod.Settings.minorMendingThreshold;
 
         protected override DesignationDef DesignationDef => R4DefOf.R4_Repair;
 
