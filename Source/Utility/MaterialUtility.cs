@@ -409,6 +409,49 @@ namespace RRRR
             }
         }
 
+        /// <summary>
+        /// Places the pawn's currently carried thing onto the bench's ingredient
+        /// stack cells, preferring cells closest to the interaction cell. This
+        /// matches vanilla workbench staging more closely than dropping the item
+        /// near the pawn.
+        /// </summary>
+        public static bool TryPlaceCarriedThingOnBench(Pawn pawn, Thing bench, out Thing placedThing)
+        {
+            placedThing = null;
+
+            if (pawn?.carryTracker?.CarriedThing == null)
+                return true;
+
+            if (bench is IBillGiver billGiver)
+            {
+                IntVec3 interactionCell = bench.Position;
+                if (bench is Building building && building.def.hasInteractionCell)
+                    interactionCell = building.InteractionCell;
+
+                var orderedCells = new List<IntVec3>();
+                foreach (IntVec3 cell in billGiver.IngredientStackCells)
+                    orderedCells.Add(cell);
+
+                orderedCells.Sort((a, b) =>
+                    (a - interactionCell).LengthHorizontalSquared
+                        .CompareTo((b - interactionCell).LengthHorizontalSquared));
+
+                for (int i = 0; i < orderedCells.Count; i++)
+                {
+                    if (pawn.carryTracker.TryDropCarriedThing(orderedCells[i], ThingPlaceMode.Direct, out placedThing))
+                        return true;
+                }
+
+                for (int i = 0; i < orderedCells.Count; i++)
+                {
+                    if (pawn.carryTracker.TryDropCarriedThing(orderedCells[i], ThingPlaceMode.Near, out placedThing))
+                        return true;
+                }
+            }
+
+            return pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out placedThing);
+        }
+
         // ================================================================
         // RETURN PERCENT CALCULATION
         // ================================================================

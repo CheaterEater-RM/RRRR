@@ -30,9 +30,9 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `RecipeWorker_R4Recycle` | Bill-based: defers item destruction, skill-based product calculation |
 | `RecipeWorker_R4Repair` | Bill-based: one repair cycle per iteration, consumes materials from map |
 | `RecipeWorker_R4Clean` | Bill-based: removes taint, leaves item on bench |
-| `JobDriver_R4Recycle` | Designation flow: haul item to bench → work → spawn materials → destroy item |
-| `JobDriver_R4Repair` | Designation flow: gather ingredients → haul item → work → apply repair cycle |
-| `JobDriver_R4Clean` | Designation flow: gather ingredients → haul item → work → remove taint |
+| `JobDriver_R4Recycle` | Designation flow: haul item onto bench stack cells → work → spawn materials → destroy item |
+| `JobDriver_R4Repair` | Designation flow: gather ingredients → haul item onto bench stack cells → work → apply repair cycle |
+| `JobDriver_R4Clean` | Designation flow: gather ingredients → haul item onto bench stack cells → work → remove taint |
 | `WorkGiver_R4DesignationBase` | Abstract base for all designation WorkGivers, handles bench routing by work type |
 | `MaterialUtility` | All material cost/return calculations, ingredient finding, sigmoid recycle curve |
 | `WorkbenchRouter` | Maps item → valid workbench(es) via `recipeMaker.recipeUsers` + fallback |
@@ -61,6 +61,8 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 **Gizmo (direct select):** Select item → click gizmo → gizmo places designation → same WorkGiver flow. Gizmos injected via `Thing.GetGizmos` Harmony postfix. Rich tooltips show bench routing, material costs, and success chance estimates (at skill 10).
 
 **Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle and Clean use vanilla's `WorkGiver_DoBill` pipeline; Repair uses custom `WorkGiver_R4RepairBill` because the item must be hauled along with repair materials. A narrow Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out only R4 repair jobs so vanilla bill search does not race the custom repair bill path.
+
+**Bench staging:** R4's custom job drivers place the worked item onto the bench's `IngredientStackCells`, matching vanilla worktable staging more closely than dropping the item near the pawn.
 
 ### WorkGiver Architecture
 

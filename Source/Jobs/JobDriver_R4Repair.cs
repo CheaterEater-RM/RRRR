@@ -129,7 +129,10 @@ namespace RRRR
             dropItem.initAction = delegate
             {
                 if (pawn.carryTracker.CarriedThing != null)
-                    pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out _);
+                {
+                    if (!MaterialUtility.TryPlaceCarriedThingOnBench(pawn, Bench, out _))
+                        EndJobWith(JobCondition.Incompletable);
+                }
             };
             yield return dropItem;
 

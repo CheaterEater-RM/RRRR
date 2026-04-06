@@ -32,6 +32,9 @@ namespace RRRR
             VerifyDef<RecipeDef>("RRRR_Recycle_Fabrication");
             VerifyDef<RecipeDef>("RRRR_Clean_CraftingSpot");
             VerifyDef<RecipeDef>("RRRR_Clean_Tailor");
+            VerifyDef<RecipeDef>("RRRR_Clean_Smithy");
+            VerifyDef<RecipeDef>("RRRR_Clean_Machining");
+            VerifyDef<RecipeDef>("RRRR_Clean_Fabrication");
 
             RuntimeHelpers.RunClassConstructor(typeof(R4WorkbenchFilterCache).TypeHandle);
         }

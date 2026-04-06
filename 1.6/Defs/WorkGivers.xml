@@ -5,8 +5,8 @@
   <!--                                                             -->
   <!-- Each action (recycle, repair, clean) is registered under    -->
   <!-- multiple WorkGiverDefs matching the bench work types.       -->
-  <!-- Clean has no Smithing WorkGiver since tainted apparel is    -->
-  <!-- never routed to smithies.                                   -->
+  <!-- Clean also has a Smithing WorkGiver because flak/power       -->
+  <!-- armour and other smithing-routed apparel can be tainted.    -->
   <!-- ═══════════════════════════════════════════════════════════ -->
 
   <!-- ─── RECYCLE ─────────────────────────────────────────────── -->
@@ -88,6 +88,17 @@
     <label>clean tainted apparel (craft)</label>
     <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
     <workType>Crafting</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Smithing</defName>
+    <label>clean tainted apparel (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Smithing</workType>
     <priorityInType>45</priorityInType>
     <verb>clean</verb>
     <gerund>cleaning tainted apparel</gerund>
