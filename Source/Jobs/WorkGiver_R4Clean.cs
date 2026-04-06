@@ -21,6 +21,8 @@ namespace RRRR
                 return false;
             if (t.IsForbidden(pawn) || !pawn.CanReserve(t, 1, -1, null, forced))
                 return false;
+            if (!(t is Apparel apparel) || !apparel.WornByCorpse)
+                return false;
             if (!ItemHasMatchingBench(pawn, t))
                 return false;
 
@@ -40,6 +42,8 @@ namespace RRRR
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
             if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Clean) == null)
+                return null;
+            if (!(t is Apparel apparel) || !apparel.WornByCorpse)
                 return null;
 
             Thing bench = FindBench(pawn, t, forced);

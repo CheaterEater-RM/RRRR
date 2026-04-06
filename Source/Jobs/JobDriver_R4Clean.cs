@@ -74,6 +74,7 @@ namespace RRRR
             {
                 Thing item = CleanItem;
                 if (item == null || item.Destroyed) return true;
+                if (!(item is Apparel apparel) || !apparel.WornByCorpse) return true;
                 if (IsBillDriven) return job.bill.DeletedOrDereferenced || job.bill.suspended;
                 if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean) == null)
                     return true;
