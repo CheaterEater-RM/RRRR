@@ -42,12 +42,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `Designator_RepairThing` | Orders menu designator for drag-select repair |
 | `Designator_CleanThing` | Orders menu designator for drag-select taint cleaning |
 
-### Harmony Patches (2 total)
+### Harmony Patches (3 total)
 
 | Target | Type | Purpose |
 |---|---|---|
 | `Thing.GetGizmos` | Postfix | Inject per-item R4 gizmo buttons (recycle, repair, clean) with rich tooltips |
 | `Building_WorkTable.SpawnSetup` | Postfix | Strip stale bills (e.g. vanilla SmeltWeapon) on load/placement for save compat |
+| `WorkGiver_DoBill.JobOnThing` | Postfix | Null out only R4 repair jobs so vanilla bill search cannot run in parallel with `WorkGiver_R4RepairBill` |
 
 ### Designation Flow
 
@@ -59,13 +60,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 **Gizmo (direct select):** Select item → click gizmo → gizmo places designation → same WorkGiver flow. Gizmos injected via `Thing.GetGizmos` Harmony postfix. Rich tooltips show bench routing, material costs, and success chance estimates (at skill 10).
 
-**Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle and Clean use vanilla's `WorkGiver_DoBill` pipeline; Repair uses custom `WorkGiver_R4RepairBill` because the item must be hauled along with repair materials.
+**Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle and Clean use vanilla's `WorkGiver_DoBill` pipeline; Repair uses custom `WorkGiver_R4RepairBill` because the item must be hauled along with repair materials. A narrow Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out only R4 repair jobs so vanilla bill search does not race the custom repair bill path.
 
 ### WorkGiver Architecture
 
 Each designation action (recycle, repair, clean) is registered under **three WorkGiverDefs** — Crafting, Smithing, Tailoring — so the work tab column matches the bench type. The shared `WorkGiver_R4DesignationBase.FindBench` filters candidates to benches whose WorkTypeDef matches the WorkGiver's own `def.workType`.
 
-Bill-based repair uses per-bench `WorkGiver_R4RepairBill` defs with `fixedBillGiverDefs`. Repair recipes use `requiredGiverWorkType=Crafting` to block vanilla's `WorkGiver_DoBill` on smithing/tailoring benches (our custom WorkGiver bypasses this gate).
+Bill-based repair uses per-bench `WorkGiver_R4RepairBill` defs with `fixedBillGiverDefs`. Repair recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes only R4 repair jobs from the vanilla path.
 
 ### Workbench Routing
 
@@ -179,6 +180,7 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 ### Bill Pipeline
 - Recycle/Clean bills: vanilla `WorkGiver_DoBill` → `JobDriver_DoBill` → custom `RecipeWorker`
 - Repair bills: custom `WorkGiver_R4RepairBill` → custom `JobDriver_R4Repair` (uses `JobDriver_DoBill.CollectIngredientsToils`)
+- Vanilla `WorkGiver_DoBill` is allowed to search normally but any resulting R4 repair job is nulled out by Harmony so only the custom repair bill path executes
 - `RecipeWorker.ConsumeIngredient` overridden to prevent item destruction
 - `RecipeWorker.Notify_IterationCompleted` handles actual R4 logic (has pawn reference for skill)
 

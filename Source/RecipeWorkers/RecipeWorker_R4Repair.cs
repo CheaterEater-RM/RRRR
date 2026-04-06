@@ -6,15 +6,18 @@ using Verse;
 namespace RRRR
 {
     /// <summary>
-    /// RecipeWorker for bill-based repair. Works with vanilla's JobDriver_DoBill.
-    /// The damaged item is the "ingredient". We don't destroy it — instead we
-    /// run one repair cycle (skill check, HP restoration, failure mechanics)
-    /// and consume repair materials from nearby map stacks.
+    /// RecipeWorker for bill-based repair. The damaged item is the "ingredient".
+    /// We don't destroy it — instead one repair cycle is applied and repair
+    /// materials are consumed.
     /// 
     /// Minor mending: items at ≥95% HP are repaired for free.
     /// 
     /// After completion, the item stays on the bench. If still damaged,
     /// the bill will pick it up again for another cycle.
+    ///
+    /// Repair bills are issued through WorkGiver_R4RepairBill + JobDriver_R4Repair.
+    /// A narrow Harmony patch blocks vanilla WorkGiver_DoBill from creating a
+    /// duplicate repair job for these recipes.
     /// </summary>
     public class RecipeWorker_R4Repair : RecipeWorker
     {
