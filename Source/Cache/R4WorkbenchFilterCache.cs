@@ -27,8 +27,8 @@ namespace RRRR
     ///
     /// The approach relies on two sources of bench-item relationships:
     ///   1. item.recipeMaker.recipeUsers  — items listing their benches (primary)
-    ///   2. recipe.recipeUsers            — recipes listing their benches (secondary)
-    ///      Used to catch modded benches added via recipe-side patching.
+    ///   2. recipe.AllRecipeUsers         — recipes listing benches directly OR
+    ///      benches owning the recipe in ThingDef.recipes (secondary, matches vanilla)
     /// </summary>
     public static class R4WorkbenchFilterCache
     {
@@ -78,6 +78,7 @@ namespace RRRR
             AssignFallbacks();
             InjectModdedBenchBills();
             PatchRecipeFilters();
+            WorkbenchRouter.BuildFallbackCache();
 
             R4Log.Debug($"Cache built: {BenchCraftables.Count} benches, " +
                         $"{BenchCraftables.Values.Sum(s => s.Count)} item-bench mappings.");
@@ -181,24 +182,24 @@ namespace RRRR
             }
         }
 
-        // ── Step 1b: invert recipe.recipeUsers ────────────────────────────────
+        // ── Step 1b: invert recipe-side bench ownership ───────────────────────
 
         /// <summary>
-        /// Secondary pass: scan all RecipeDefs whose recipeUsers list benches.
-        /// This catches mods that add a new bench by patching an existing recipe's
-        /// recipeUsers list (rather than setting recipeMaker.recipeUsers on items).
-        /// We look at the produced items of each recipe to find eligible gear.
+        /// Secondary pass: scan all RecipeDefs and use the same bench ownership
+        /// semantics vanilla exposes through RecipeDef.AllRecipeUsers. This catches:
+        ///   1. recipes that list benches directly in recipe.recipeUsers
+        ///   2. benches that own the recipe via ThingDef.recipes
+        /// We look at the produced item of each recipe to find eligible gear.
         /// </summary>
         static void BuildFromRecipeSideUsers()
         {
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
-                if (recipe.recipeUsers == null || recipe.recipeUsers.Count == 0) continue;
                 // Only care about recipes that produce a single eligible thing
                 ThingDef product = recipe.ProducedThingDef;
                 if (product == null || !IsR4Eligible(product)) continue;
 
-                foreach (ThingDef bench in recipe.recipeUsers)
+                foreach (ThingDef bench in AllRecipeUsers(recipe))
                 {
                     if (!BenchCraftables.TryGetValue(bench, out HashSet<ThingDef> set))
                         BenchCraftables[bench] = set = new HashSet<ThingDef>();
@@ -288,8 +289,7 @@ namespace RRRR
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
                 if (!r4Types.Contains(recipe.workerClass)) continue;
-                if (recipe.recipeUsers == null) continue;
-                foreach (ThingDef bench in recipe.recipeUsers)
+                foreach (ThingDef bench in AllRecipeUsers(recipe))
                     coveredBenches.Add(bench);
             }
 
@@ -327,8 +327,13 @@ namespace RRRR
                 if (hasClean)
                     InjectRecipeDef(cleanTemplate, $"RRRR_Clean_Mod_{safeName}", bench, bench.recipes);
 
-                // Inject a WorkGiverDef for the repair bill pipeline
+                // Recycle intentionally stays on the bench's existing DoBill-compatible
+                // WorkGiver. Only repair and clean need custom bill WorkGivers because
+                // they bypass vanilla's normal bill execution path.
+                // Inject custom WorkGiverDefs for the bill pipeline where needed.
                 InjectRepairBillWorkGiver(bench, safeName);
+                if (hasClean)
+                    InjectCleanBillWorkGiver(bench, safeName);
 
                 R4Log.Debug($"Injected R4 bills onto modded bench: {bench.defName}");
                 injected++;
@@ -412,6 +417,32 @@ namespace RRRR
             DefDatabase<WorkGiverDef>.Add(wg);
         }
 
+        static void InjectCleanBillWorkGiver(ThingDef bench, string safeName)
+        {
+            if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
+                workType = DefDatabase<WorkTypeDef>.GetNamedSilentFail("Crafting");
+
+            var wg = new WorkGiverDef
+            {
+                defName            = $"RRRR_CleanBill_Mod_{safeName}",
+                label              = $"clean apparel at {bench.label}",
+                giverClass         = typeof(WorkGiver_R4CleanBill),
+                workType           = workType,
+                priorityInType     = 47,
+                fixedBillGiverDefs = new List<ThingDef> { bench },
+                verb               = "clean at",
+                gerund             = $"cleaning apparel at {bench.label}",
+                prioritizeSustains = true,
+            };
+
+            var manipulation = DefDatabase<PawnCapacityDef>.GetNamedSilentFail("Manipulation");
+            if (manipulation != null)
+                wg.requiredCapacities = new List<PawnCapacityDef> { manipulation };
+
+            wg.ResolveDefNameHash();
+            DefDatabase<WorkGiverDef>.Add(wg);
+        }
+
         // ── Step 3: stamp filter onto every RRRR RecipeDef ───────────────────
 
         static void PatchRecipeFilters()
@@ -426,10 +457,8 @@ namespace RRRR
                     recipe.workerClass != recycleType &&
                     recipe.workerClass != cleanType) continue;
 
-                if (recipe.recipeUsers == null || recipe.recipeUsers.Count == 0) continue;
-
                 var allowed = new HashSet<ThingDef>();
-                foreach (ThingDef bench in recipe.recipeUsers)
+                foreach (ThingDef bench in AllRecipeUsers(recipe))
                 {
                     if (BenchCraftables.TryGetValue(bench, out HashSet<ThingDef> craftables))
                         allowed.UnionWith(craftables);
@@ -467,7 +496,36 @@ namespace RRRR
             ThingFilter filter = new ThingFilter();
             foreach (ThingDef td in defs)
                 filter.SetAllow(td, true);
+
+            // ResolveReferences sets up:
+            //  1. disallowedSpecialFilters (AllowDeadmansApparel etc.) from allowedByDefault=false
+            //  2. allowedHitPointsConfigurable / allowedQualitiesConfigurable → enables HP/quality sliders
+            //  3. DisplayRootCategory → drives the filter UI tree
+            // Declaration lists (thingDefs, categories) are null so step 1 is the only mutation.
+            filter.ResolveReferences();
+
+            // Re-allow all special filters that ResolveReferences just disallowed.
+            // R4 recipes take gear items as inputs (not consumable materials), so:
+            //  - Repair: tainted damaged items should be repairable
+            //  - Recycle: tainted items are recyclable (taint penalty applied to yield)
+            //  - Clean: tainted apparel is the required input
+            // The player can still toggle these off per-bill in Dialog_BillConfig.
+            foreach (SpecialThingFilterDef sf in DefDatabase<SpecialThingFilterDef>.AllDefsListForReading)
+                if (!sf.allowedByDefault)
+                    filter.SetAllow(sf, true);
+
             return filter;
+        }
+
+        static IEnumerable<ThingDef> AllRecipeUsers(RecipeDef recipe)
+        {
+            var seen = new HashSet<ThingDef>();
+
+            foreach (ThingDef bench in recipe.AllRecipeUsers)
+            {
+                if (bench != null && seen.Add(bench))
+                    yield return bench;
+            }
         }
 
         // ── Public helpers ─────────────────────────────────────────────────────
@@ -502,6 +560,7 @@ namespace RRRR
         public static bool IsRecycleEligible(ThingDef def) => IsGear(def);
 
         public static bool IsCleanEligible(ThingDef def) =>
-            def != null && def.useHitPoints && def.IsApparel;
+            def != null && def.useHitPoints && def.IsApparel &&
+            !ExplicitlyExcludedItems.Contains(def);
     }
 }

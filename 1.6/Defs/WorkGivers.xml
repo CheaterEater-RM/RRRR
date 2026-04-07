@@ -80,8 +80,8 @@
   </WorkGiverDef>
 
   <!-- ─── CLEAN ───────────────────────────────────────────────── -->
-  <!-- Tainted apparel routes to crafting spot and tailor benches  -->
-  <!-- only — never smithies. No Smithing WorkGiver for clean.     -->
+  <!-- Tainted apparel can route through crafting, tailoring, or    -->
+  <!-- smithing benches depending on the underlying apparel recipe. -->
 
   <WorkGiverDef>
     <defName>RRRR_Clean_Crafting</defName>
@@ -114,6 +114,87 @@
     <verb>clean</verb>
     <gerund>cleaning tainted apparel</gerund>
     <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- BILL-BASED CLEAN                                            -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_CraftingSpot</defName>
+    <label>clean tainted items at crafting spot</label>
+    <giverClass>RRRR.WorkGiver_R4CleanBill</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>47</priorityInType>
+    <fixedBillGiverDefs>
+      <li>CraftingSpot</li>
+    </fixedBillGiverDefs>
+    <verb>clean at</verb>
+    <gerund>cleaning tainted items at crafting spot</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Tailor</defName>
+    <label>clean tainted items at tailor bench</label>
+    <giverClass>RRRR.WorkGiver_R4CleanBill</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>105</priorityInType>
+    <fixedBillGiverDefs>
+      <li>HandTailoringBench</li>
+      <li>ElectricTailoringBench</li>
+    </fixedBillGiverDefs>
+    <verb>clean at</verb>
+    <gerund>cleaning tainted items at tailor bench</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Smithy</defName>
+    <label>clean tainted items at smithy</label>
+    <giverClass>RRRR.WorkGiver_R4CleanBill</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>110</priorityInType>
+    <fixedBillGiverDefs>
+      <li>FueledSmithy</li>
+      <li>ElectricSmithy</li>
+    </fixedBillGiverDefs>
+    <verb>clean at</verb>
+    <gerund>cleaning tainted items at smithy</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Machining</defName>
+    <label>clean tainted items at machining table</label>
+    <giverClass>RRRR.WorkGiver_R4CleanBill</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>70</priorityInType>
+    <fixedBillGiverDefs>
+      <li>TableMachining</li>
+    </fixedBillGiverDefs>
+    <verb>clean at</verb>
+    <gerund>cleaning tainted items at machining table</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Fabrication</defName>
+    <label>clean tainted items at fabrication bench</label>
+    <giverClass>RRRR.WorkGiver_R4CleanBill</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>66</priorityInType>
+    <fixedBillGiverDefs>
+      <li>FabricationBench</li>
+    </fixedBillGiverDefs>
+    <verb>clean at</verb>
+    <gerund>cleaning tainted items at fabrication bench</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+    <prioritizeSustains>true</prioritizeSustains>
   </WorkGiverDef>
 
   <!-- ═══════════════════════════════════════════════════════════ -->

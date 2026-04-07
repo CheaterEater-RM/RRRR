@@ -28,7 +28,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `WorkGiver_R4Clean` | Designation-based: scans for tainted apparel, creates clean jobs |
 | `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling |
 | `RecipeWorker_R4Recycle` | Bill-based: defers item destruction, skill-based product calculation |
-| `RecipeWorker_R4Repair` | Bill-based: one repair cycle per iteration, consumes materials from map |
+| `RecipeWorker_R4Repair` | Bill-based: prevents bill ingredient destruction; actual repair logic runs in `JobDriver_R4Repair` |
 | `RecipeWorker_R4Clean` | Bill-based: removes taint, leaves item on bench |
 | `JobDriver_R4Recycle` | Designation flow: haul item onto bench stack cells → work → spawn materials → destroy item |
 | `JobDriver_R4Repair` | Designation flow: gather ingredients → haul item onto bench stack cells → work → apply repair cycle |
@@ -48,7 +48,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 |---|---|---|
 | `Thing.GetGizmos` | Postfix | Inject per-item R4 gizmo buttons (recycle, repair, clean) with rich tooltips |
 | `Building_WorkTable.SpawnSetup` | Postfix | Strip stale bills (e.g. vanilla SmeltWeapon) on load/placement for save compat |
-| `WorkGiver_DoBill.JobOnThing` | Postfix | Null out only R4 repair jobs so vanilla bill search cannot run in parallel with `WorkGiver_R4RepairBill` |
+| `WorkGiver_DoBill.JobOnThing` | Postfix | Null out R4 repair and clean jobs so vanilla bill search cannot run in parallel with the custom R4 bill WorkGivers |
 
 ### Designation Flow
 
@@ -60,7 +60,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 **Gizmo (direct select):** Select item → click gizmo → gizmo places designation → same WorkGiver flow. Gizmos injected via `Thing.GetGizmos` Harmony postfix. Rich tooltips show bench routing, material costs, and success chance estimates (at skill 10).
 
-**Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle and Clean use vanilla's `WorkGiver_DoBill` pipeline; Repair uses custom `WorkGiver_R4RepairBill` because the item must be hauled along with repair materials. A narrow Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out only R4 repair jobs so vanilla bill search does not race the custom repair bill path.
+**Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle uses vanilla's `WorkGiver_DoBill` pipeline. Repair and Clean use custom `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` because the worked item and dynamic material costs need to be handled together. A Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out R4 repair and clean jobs so vanilla bill search does not race the custom bill paths.
 
 **Bench staging:** R4's custom job drivers place the worked item onto the bench's `IngredientStackCells`, matching vanilla worktable staging more closely than dropping the item near the pawn.
 
@@ -68,14 +68,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 Each designation action (recycle, repair, clean) is registered under **three WorkGiverDefs** — Crafting, Smithing, Tailoring — so the work tab column matches the bench type. The shared `WorkGiver_R4DesignationBase.FindBench` filters candidates to benches whose WorkTypeDef matches the WorkGiver's own `def.workType`.
 
-Bill-based repair uses per-bench `WorkGiver_R4RepairBill` defs with `fixedBillGiverDefs`. Repair recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes only R4 repair jobs from the vanilla path.
+Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path.
 
 ### Workbench Routing
 
 **Primary strategy:** Each item's `recipeMaker.recipeUsers` lists the benches where it was originally crafted. R4 routes the item to those same benches for recycling/repair. This means a revolver goes to the machining table, a longsword to the smithy, and a jacket to the tailor bench — automatically correct for vanilla and modded items.
 
-**Fallback** (for items without `recipeMaker`, e.g. quest rewards, trader goods, loot): Route by `techLevel` to an appropriate bench (Animal/Neolithic→CraftingSpot, Medieval→Smithy, Industrial→Machining, Spacer+→Fabrication). Last resort → machinining table.
-
+**Fallback** (for items without `recipeMaker`, e.g. quest rewards, trader goods, loot): Route by `techLevel` to an appropriate bench (Animal/Neolithic→CraftingSpot, Medieval→Smithy, Industrial→Machining, Spacer+→Fabrication). Last resort → machining table.
 **Eligibility:** Bench routing uses a broad gear predicate: `useHitPoints && (IsWeapon || IsApparel)`. Repair and recycle both use that same check. Clean uses the apparel subset of that rule. `smeltable` is not used for R4 eligibility. Explicit exclusions live in `1.6/Defs/EligibilityExclusions.xml` so outliers can be blocked without hardcoding them into the predicate.
 
 `R4WorkbenchFilterCache` builds all mappings at startup:
@@ -135,7 +134,7 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
   - Only included if `costPerCycle × RepairCyclesFull < baseCost` (total < make cost)
   - Fallback: 1 unit of highest-count material if nothing passes
 - **Minor mending:** Items at ≥95% HP are repaired without material consumption
-- Tech difficulty from `recipeMaker.researchPrerequisite.techLevel`: Neolithic 0.80 → Archotech 2.00 (× `Settings.repairTechDifficultyMult`)
+- Tech difficulty from `recipeMaker.researchPrerequisite.techLevel`: Neolithic 0.80 → Archotech 2.00
 - Success: `(0.50 + skill×0.025) / techDifficulty`, clamped [0.05, 1.0]
 - Minor failure: 5% HP loss
 - Critical failure (below 50% HP, 20% of failures): 15% HP loss + quality drop via `CompQuality.SetQuality()`
@@ -180,11 +179,12 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 - `CompQuality.SetQuality(QualityCategory, ArtGenerationContext?)` — public method, no reflection needed
 
 ### Bill Pipeline
-- Recycle/Clean bills: vanilla `WorkGiver_DoBill` → `JobDriver_DoBill` → custom `RecipeWorker`
+- Recycle bills: vanilla `WorkGiver_DoBill` → `JobDriver_DoBill` → custom `RecipeWorker_R4Recycle`
 - Repair bills: custom `WorkGiver_R4RepairBill` → custom `JobDriver_R4Repair` (uses `JobDriver_DoBill.CollectIngredientsToils`)
-- Vanilla `WorkGiver_DoBill` is allowed to search normally but any resulting R4 repair job is nulled out by Harmony so only the custom repair bill path executes
+- Clean bills: custom `WorkGiver_R4CleanBill` → custom `JobDriver_R4Clean` (uses `JobDriver_DoBill.CollectIngredientsToils`)
+- Vanilla `WorkGiver_DoBill` is allowed to search normally but any resulting R4 repair or clean job is nulled out by Harmony so only the custom bill paths execute
 - `RecipeWorker.ConsumeIngredient` overridden to prevent item destruction
-- `RecipeWorker.Notify_IterationCompleted` handles actual R4 logic (has pawn reference for skill)
+- `RecipeWorker.Notify_IterationCompleted` handles recycle/clean completion logic; repair completion is handled in `JobDriver_R4Repair`
 
 ## Settings
 
@@ -193,9 +193,8 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 | Setting | Default | Range | Effect |
 |---|---|---|---|
 | `recycleGlobalMult` | 1.0 | 0.1–2.0 | Global scalar on all recycle yields |
-| `skipIntricateComponents` | true | — | Exclude components from recycle returns |
+| `skipIntricateComponents` | false | — | Exclude components from recycle returns |
 | `repairHpPerCycle` | 0.20 | 0.05–0.50 | HP fraction restored per cycle (drives cycle count) |
-| `repairTechDifficultyMult` | 1.0 | 0.5–3.0 | Scalar on tech difficulty for repair success |
 | `cleanCostFraction` | 0.20 | 0.05–0.50 | Material cost as fraction of make cost |
 
 Derived: `RepairCyclesFull = Ceil(1/repairHpPerCycle)`, `RepairCostDivisor = RepairCyclesFull × 2`, `CleanCostDivisor = Round(1/cleanCostFraction)`.

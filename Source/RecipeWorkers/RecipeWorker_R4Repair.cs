@@ -1,23 +1,14 @@
 using System.Collections.Generic;
 using RimWorld;
-using UnityEngine;
 using Verse;
 
 namespace RRRR
 {
     /// <summary>
-    /// RecipeWorker for bill-based repair. The damaged item is the "ingredient".
-    /// We don't destroy it — instead one repair cycle is applied and repair
-    /// materials are consumed.
-    /// 
-    /// Minor mending: items at ≥95% HP are repaired for free.
-    /// 
-    /// After completion, the item stays on the bench. If still damaged,
-    /// the bill will pick it up again for another cycle.
-    ///
-    /// Repair bills are issued through WorkGiver_R4RepairBill + JobDriver_R4Repair.
-    /// A narrow Harmony patch blocks vanilla WorkGiver_DoBill from creating a
-    /// duplicate repair job for these recipes.
+    /// RecipeWorker for bill-based repair. The damaged item is the "ingredient",
+    /// but actual repair logic is handled entirely by WorkGiver_R4RepairBill +
+    /// JobDriver_R4Repair. This worker only prevents vanilla ingredient
+    /// destruction if the item ever flows through recipe code paths.
     /// </summary>
     public class RecipeWorker_R4Repair : RecipeWorker
     {
@@ -31,134 +22,9 @@ namespace RRRR
 
         public override void Notify_IterationCompleted(Pawn billDoer, List<Thing> ingredients)
         {
-            if (billDoer == null || billDoer.Map == null)
-                return;
-
-            for (int i = 0; i < ingredients.Count; i++)
-            {
-                Thing item = ingredients[i];
-                if (item == null || item.Destroyed)
-                    continue;
-                if (!item.def.IsWeapon && !item.def.IsApparel)
-                    continue;
-                if (!item.def.useHitPoints)
-                    continue;
-                if (item.HitPoints >= item.MaxHitPoints)
-                    continue;
-
-                Map map = billDoer.Map;
-
-                // Consume repair materials (unless minor mending)
-                bool isMinorMending = WorkGiver_R4Repair.IsMinorMending(item);
-                if (!isMinorMending)
-                {
-                    var cycleCost = MaterialUtility.GetRepairCycleCost(item);
-                    if (cycleCost.Count > 0)
-                    {
-                        if (!TryConsumeRepairMaterials(cycleCost, billDoer, map))
-                        {
-                            Messages.Message(
-                                "R4_RepairNoMaterials".Translate(item.LabelCap),
-                                item, MessageTypeDefOf.RejectInput);
-                            continue;
-                        }
-                    }
-                }
-
-                // Skill check
-                int skillLevel = billDoer?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-                float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
-                float successChance = SkillUtility.RepairSuccessChance(skillLevel, techDifficulty);
-
-                if (Rand.Chance(successChance))
-                {
-                    float hpFraction = RRRR_Mod.Settings.repairHpPerCycle;
-                    int cycleHP = Mathf.Max(1, Mathf.RoundToInt(item.MaxHitPoints * hpFraction));
-                    item.HitPoints = Mathf.Min(item.MaxHitPoints, item.HitPoints + cycleHP);
-                }
-                else
-                {
-                    if (SkillUtility.IsCriticalFailure(item))
-                    {
-                        SkillUtility.ApplyCriticalFailure(item);
-                        Messages.Message("R4_RepairCriticalFailure".Translate(billDoer.LabelShort, item.LabelCap),
-                            item, MessageTypeDefOf.NegativeEvent);
-                    }
-                    else
-                    {
-                        SkillUtility.ApplyMinorFailure(item);
-                        Messages.Message("R4_RepairMinorFailure".Translate(billDoer.LabelShort, item.LabelCap),
-                            item, MessageTypeDefOf.NeutralEvent);
-                    }
-                }
-
-                // Handle destruction from critical failure
-                if (item.HitPoints <= 0 && !item.Destroyed)
-                {
-                    string itemLabel = item.LabelCap;
-                    MaterialUtility.SpawnPartialReclaim(item, billDoer, 0.25f, billDoer.Position, map);
-                    map.designationManager.RemoveAllDesignationsOn(item);
-                    item.Destroy(DestroyMode.Vanish);
-                    Messages.Message("R4_RepairItemDestroyed".Translate(itemLabel),
-                        new TargetInfo(billDoer.Position, map), MessageTypeDefOf.NegativeEvent);
-                    continue;
-                }
-
-                // Remove designation if present
-                if (item.HitPoints >= item.MaxHitPoints && item.Map != null)
-                {
-                    var des = item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Repair);
-                    if (des != null)
-                        item.Map.designationManager.RemoveDesignation(des);
-                }
-            }
-        }
-
-        private bool TryConsumeRepairMaterials(List<ThingDefCountClass> costs, Pawn pawn, Map map)
-        {
-            for (int i = 0; i < costs.Count; i++)
-            {
-                int available = CountAvailableOnMap(costs[i].thingDef, map, pawn);
-                if (available < costs[i].count)
-                    return false;
-            }
-            for (int i = 0; i < costs.Count; i++)
-            {
-                ConsumeFromMap(costs[i].thingDef, costs[i].count, map, pawn);
-            }
-            return true;
-        }
-
-        private int CountAvailableOnMap(ThingDef matDef, Map map, Pawn pawn)
-        {
-            int total = 0;
-            var things = map.listerThings.ThingsOfDef(matDef);
-            if (things == null) return 0;
-            for (int i = 0; i < things.Count; i++)
-            {
-                if (!things[i].IsForbidden(pawn))
-                    total += things[i].stackCount;
-            }
-            return total;
-        }
-
-        private void ConsumeFromMap(ThingDef matDef, int amount, Map map, Pawn pawn)
-        {
-            int remaining = amount;
-            var things = map.listerThings.ThingsOfDef(matDef);
-            if (things == null) return;
-            var sorted = new List<Thing>(things);
-            sorted.Sort((a, b) =>
-                a.Position.DistanceToSquared(pawn.Position)
-                .CompareTo(b.Position.DistanceToSquared(pawn.Position)));
-            for (int i = 0; i < sorted.Count && remaining > 0; i++)
-            {
-                Thing t = sorted[i];
-                if (t.IsForbidden(pawn)) continue;
-                int take = Mathf.Min(remaining, t.stackCount);
-                t.SplitOff(take).Destroy();
-                remaining -= take;
-            }
+            // Repair bills run through JobDriver_R4Repair, not vanilla DoBill.
+            // Leave this as a no-op safety hook to avoid duplicating repair logic
+            // if recipe code paths are ever reached unexpectedly.
         }
     }
 }
