@@ -19,6 +19,7 @@ namespace RRRR
         {
             defaultLabel = "R4_RecycleLabel".Translate();
             defaultDesc  = "R4_RecycleDesc".Translate();
+            hotKey = R4DefOf.R4_RecycleHotKey;
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RecycleMenu", reportFailure: false)
                 ?? ContentFinder<Texture2D>.Get("UI/Designators/Haul", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;

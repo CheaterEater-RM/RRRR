@@ -19,6 +19,7 @@ namespace RRRR
         {
             defaultLabel = "R4_CleanLabel".Translate();
             defaultDesc  = "R4_CleanDesc".Translate();
+            hotKey = R4DefOf.R4_CleanHotKey;
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4CleanMenu", reportFailure: false)
                 ?? ContentFinder<Texture2D>.Get("UI/Designators/Unforbid", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;

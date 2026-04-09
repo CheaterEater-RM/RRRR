@@ -19,6 +19,7 @@ namespace RRRR
         {
             defaultLabel = "R4_RepairLabel".Translate();
             defaultDesc  = "R4_RepairDesc".Translate();
+            hotKey = R4DefOf.R4_RepairHotKey;
             icon = ContentFinder<Texture2D>.Get("UI/Designators/R4RepairMenu", reportFailure: false)
                 ?? ContentFinder<Texture2D>.Get("UI/Designators/Claim", reportFailure: true);
             soundDragSustain = SoundDefOf.Designate_DragStandard;

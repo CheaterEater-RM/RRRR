@@ -84,6 +84,7 @@ namespace RRRR
                 icon        = ContentFinder<Texture2D>.Get("UI/Designators/R4RecycleMenu", reportFailure: false)
                               ?? BaseContent.BadTex,
                 defaultDesc = desc,
+                hotKey      = R4DefOf.R4_RecycleHotKey,
                 action      = delegate
                 {
                     if (already)
@@ -126,6 +127,7 @@ namespace RRRR
                 icon        = ContentFinder<Texture2D>.Get("UI/Designators/R4RepairMenu", reportFailure: false)
                               ?? BaseContent.BadTex,
                 defaultDesc = desc,
+                hotKey      = R4DefOf.R4_RepairHotKey,
                 action      = delegate
                 {
                     if (already)
@@ -174,6 +176,7 @@ namespace RRRR
                 icon        = ContentFinder<Texture2D>.Get("UI/Designators/R4CleanMenu", reportFailure: false)
                               ?? BaseContent.BadTex,
                 defaultDesc = desc,
+                hotKey      = R4DefOf.R4_CleanHotKey,
                 action      = delegate
                 {
                     if (already)
