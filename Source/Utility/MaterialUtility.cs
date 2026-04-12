@@ -357,10 +357,23 @@ namespace RRRR
         // ================================================================
 
         /// <summary>
-        /// Consumes ingredients from the bench's ingredient stack cells.
-        /// Only destroys items whose ThingDef is in expectedCosts, up to the
-        /// expected count per def. Anything else on those cells is left alone.
+        /// Consumes ingredients from the area around the bench.
+        ///
+        /// Mirrors the search order used by vanilla's IngredientPlaceCellsInOrder:
+        ///   1. IngredientStackCells (the building's own footprint cells, sorted by
+        ///      proximity to InteractionCell).
+        ///   2. Radial fallback from InteractionCell (up to MaxIngredientSearchRadius
+        ///      tiles), skipping impassable non-surface edifices — exactly the cells
+        ///      that PlaceHauledThingInCell would have chosen.
+        ///
+        /// This is necessary for 1×1 benches (crafting spot, campfire, etc.) whose
+        /// IngredientStackCells returns only the bench cell itself.  That cell fails
+        /// GenSpawn.CanSpawnAt (not walkable), so ingredients land on adjacent cells
+        /// via the radial fallback.  Scanning only IngredientStackCells for those
+        /// benches finds nothing → free repair.
         /// </summary>
+        private const int MaxIngredientSearchRadius = 6; // radial steps; well beyond any normal bench
+
         public static void ConsumeIngredientsOnBench(
             Thing bench,
             Map map,
@@ -381,31 +394,75 @@ namespace RRRR
                     remaining[entry.thingDef] = entry.count;
             }
 
-            foreach (IntVec3 cell in billGiver.IngredientStackCells)
+            // --- Phase 1: IngredientStackCells (the bench footprint), sorted by
+            //     proximity to the interaction cell — same ordering as vanilla.
+            IntVec3 interactCell = bench.Position;
+            if (bench is Building building && building.def.hasInteractionCell)
+                interactCell = building.InteractionCell;
+
+            var stackCells = new List<IntVec3>(billGiver.IngredientStackCells);
+            stackCells.Sort((a, b) =>
+                (a - interactCell).LengthHorizontalSquared
+                    .CompareTo((b - interactCell).LengthHorizontalSquared));
+
+            var visitedCells = new HashSet<IntVec3>();
+            foreach (IntVec3 cell in stackCells)
+            {
+                visitedCells.Add(cell);
+                if (remaining.Count == 0) break;
+                TryConsumeFromCell(cell, bench, map, remaining);
+            }
+
+            if (remaining.Count == 0) return;
+
+            // --- Phase 2: Radial fallback from InteractionCell.
+            //     Mirrors IngredientPlaceCellsInOrder's secondary loop:
+            //     skip impassable non-surface edifices, skip already-visited cells.
+            int maxSteps = Mathf.Min(200, GenRadial.NumCellsInRadius(MaxIngredientSearchRadius));
+            for (int i = 0; i < maxSteps; i++)
             {
                 if (remaining.Count == 0) break;
+                IntVec3 cell = interactCell + GenRadial.RadialPattern[i];
+                if (visitedCells.Contains(cell)) continue;
+                if (!cell.InBounds(map)) continue;
 
-                var things = map.thingGrid.ThingsListAt(cell);
-                for (int i = things.Count - 1; i >= 0; i--)
-                {
-                    Thing t = things[i];
-                    if (t == bench) continue;
-                    if (t.def.category != ThingCategory.Item) continue;
-                    if (!remaining.TryGetValue(t.def, out int need)) continue;
+                Building edifice = cell.GetEdifice(map);
+                if (edifice != null
+                    && edifice.def.passability == Traversability.Impassable
+                    && edifice.def.surfaceType == SurfaceType.None)
+                    continue;
 
-                    int toConsume = Mathf.Min(need, t.stackCount);
-                    need -= toConsume;
+                TryConsumeFromCell(cell, bench, map, remaining);
+            }
+        }
 
-                    if (need <= 0)
-                        remaining.Remove(t.def);
-                    else
-                        remaining[t.def] = need;
+        private static void TryConsumeFromCell(
+            IntVec3 cell,
+            Thing bench,
+            Map map,
+            Dictionary<ThingDef, int> remaining)
+        {
+            var things = map.thingGrid.ThingsListAt(cell);
+            for (int i = things.Count - 1; i >= 0; i--)
+            {
+                if (remaining.Count == 0) break;
+                Thing t = things[i];
+                if (t == bench) continue;
+                if (t.def.category != ThingCategory.Item) continue;
+                if (!remaining.TryGetValue(t.def, out int need)) continue;
 
-                    if (toConsume >= t.stackCount)
-                        t.Destroy();
-                    else
-                        t.stackCount -= toConsume;
-                }
+                int toConsume = Mathf.Min(need, t.stackCount);
+                need -= toConsume;
+
+                if (need <= 0)
+                    remaining.Remove(t.def);
+                else
+                    remaining[t.def] = need;
+
+                if (toConsume >= t.stackCount)
+                    t.Destroy();
+                else
+                    t.stackCount -= toConsume;
             }
         }
 
