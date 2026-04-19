@@ -328,11 +328,6 @@ namespace RRRR
                         $"Work cycle complete {job.def.defName}: item={DescribeItemState(item)} tracked={MaterialUtility.DescribePlacedThings(job)}");
                     ReadyForNextToil();
                 }
-                else if ((delta == 1 && pawn.IsHashIntervalTick(1000)) ||
-                         (delta > 1 && pawn.IsHashIntervalTick(1000, delta)))
-                {
-                    pawn.jobs.CheckForJobOverride();
-                }
             }
 
             workToil.WithProgressBar(BenchInd,
