@@ -116,6 +116,7 @@ namespace RRRR
                 {
                     if (bench.IsForbidden(pawn)) return false;
                     if (!pawn.CanReserve(bench, 1, -1, null, forced)) return false;
+                    if (bench.def.hasInteractionCell && !pawn.CanReserveSittableOrSpot(bench.InteractionCell, bench, forced)) return false;
                     if (bench is IBillGiver bg && !bg.CurrentlyUsableForBills()) return false;
                     return true;
                 },

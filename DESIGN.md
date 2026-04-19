@@ -65,7 +65,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 **Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle uses vanilla's `WorkGiver_DoBill` pipeline. Repair and Clean use custom `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` because the worked item and dynamic material costs need to be handled together. A Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out R4 repair and clean jobs so vanilla bill search does not race the custom bill paths.
 
-**Bench staging:** R4's custom job drivers place the worked item onto the bench's `IngredientStackCells`, matching vanilla worktable staging more closely than dropping the item near the pawn.
+**Bench staging:** Ingredient hauling for R4 repair/clean uses the bench's `IngredientStackCells`, but the worked item itself must stage to a separate nearby cell that does not reuse tracked ingredient stacks. Reusing `IngredientStackCells` for the worked item can invalidate `job.placedThings` before the work toil starts.
 
 ### WorkGiver Architecture
 
@@ -235,3 +235,24 @@ RRRR\
     ├── RecipeWorkers\        ← RecipeWorker_R4Recycle, RecipeWorker_R4Repair, RecipeWorker_R4Clean
     └── Utility\              ← MaterialUtility, WorkbenchRouter, SkillUtility
 ```
+
+  ## In Progress
+
+  ### Repair/Clean Staging Invariant
+
+  Repair and clean jobs must not use the same staging contract for both the worked item and the consumed ingredients. The stable pattern across comparable mods is that either the item itself is the bill/job target and ingredients are separate, or the job operates directly on the item without separate bench staging. R4's current failure mode comes from mixing both models: ingredients are tracked through `job.placedThings` on bench staging cells, then the worked item is also dropped onto that same staging surface. That lets the worked-item drop invalidate tracked ingredient references before the work toil starts.
+
+  Any follow-up implementation should preserve one clear ownership model:
+
+  - ingredient stacks may be staged and tracked on bench cells, with the worked item kept on a separate nearby cell, or
+  - the worked item remains the primary job target and is not independently re-staged onto ingredient cells at all.
+
+  What must not happen is a second placement step that can merge with, replace, or despawn tracked ingredient stacks belonging to the same job.
+
+  For R4 specifically, the preferred long-term model is:
+
+  - the work item remains the authoritative job object throughout the repair/clean cycle
+  - ingredients alone use the placed-things tracking contract
+  - the work item may still be shown at the bench for player feedback, but only in a dedicated display cell that is excluded from ingredient staging for that job
+
+  This display cell should be derived from the bench at runtime rather than stored as new persistent state. On benches with multiple occupied cells, one deterministic bench cell can be reserved as the display surface and removed from ingredient placement candidates. On 1x1 benches, where no separate occupied cell exists or the occupied cell is not spawnable, the display position must fall back to a deterministic adjacent cell near the interaction point. The user-facing requirement is "visibly at the bench," not "always on an occupied bench tile," because the latter is not physically valid for every vanilla bench shape.

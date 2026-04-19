@@ -53,6 +53,8 @@ namespace RRRR
                 return null;
             if (!pawn.CanReserve(workbench, 1, -1, null, forced))
                 return null;
+            if (workbench.def.hasInteractionCell && !pawn.CanReserveSittableOrSpot(workbench.InteractionCell, workbench, forced))
+                return null;
 
             foreach (Bill bill in billGiver.BillStack)
             {
@@ -99,6 +101,7 @@ namespace RRRR
                     job.count    = 1;
                     job.bill     = bill;
                     job.haulMode = HaulMode.ToCellNonStorage;
+                    job.placedThings = null;
                     job.targetQueueA = new List<LocalTargetInfo> { item };
                     job.targetQueueB = new List<LocalTargetInfo>();
                     job.countQueue = new List<int>();

@@ -358,69 +358,113 @@ namespace RRRR
         // ================================================================
 
         /// <summary>
-        /// Consumes ingredients tracked by job.placedThings, matching expected
-        /// costs by ThingDef. This is the primary consumption method for R4 jobs
-        /// after the PlaceHauledThingInCell patch populates job.placedThings.
+        /// Mirrors vanilla Toils_Recipe.CalculateIngredients for placedThings:
+        /// extract this job's counted share into detached ingredient Things,
+        /// zero the tracked counts, and clear job.placedThings.
         /// </summary>
-        public static void ConsumeFromPlacedThings(Job job, List<ThingDefCountClass> expectedCosts)
+        public static List<Thing> ExtractPlacedIngredients(Job job)
         {
-            R4Log.Debug($"ConsumeFromPlacedThings: expected={DescribeCosts(expectedCosts)} tracked={DescribePlacedThings(job)}");
+            var extractedIngredients = new List<Thing>();
 
-            if (job.placedThings == null || job.placedThings.Count == 0)
+            if (job?.placedThings == null || job.placedThings.Count == 0)
+                return extractedIngredients;
+
+            for (int i = 0; i < job.placedThings.Count; i++)
             {
-                R4Log.Warn("ConsumeFromPlacedThings: job.placedThings is null or empty. " +
-                            "Ingredients may not be consumed. Job: " + job.def.defName);
+                ThingCountClass entry = job.placedThings[i];
+                if (entry == null)
+                {
+                    R4Log.Warn($"ExtractPlacedIngredients: null placed-things entry for {DescribeJob(job)}.");
+                    continue;
+                }
+
+                if (entry.Count <= 0)
+                {
+                    R4Log.Warn(
+                        $"ExtractPlacedIngredients: non-positive tracked count {entry.Count} for {DescribeJob(job)} " +
+                        $"thing={DescribeThingReference(entry.thing)}.");
+                    continue;
+                }
+
+                Thing thing = entry.thing;
+                if (thing == null)
+                {
+                    R4Log.Warn($"ExtractPlacedIngredients: null tracked thing for {DescribeJob(job)}.");
+                    continue;
+                }
+
+                if (thing.Destroyed || thing.stackCount <= 0)
+                {
+                    R4Log.Warn(
+                        $"ExtractPlacedIngredients: invalid tracked thing for {DescribeJob(job)} " +
+                        $"thing={DescribeThingReference(thing)} count={entry.Count}.");
+                    continue;
+                }
+
+                Thing extractedThing = entry.Count >= thing.stackCount
+                    ? thing
+                    : thing.SplitOff(entry.Count);
+
+                entry.Count = 0;
+
+                if (extractedIngredients.Contains(extractedThing))
+                {
+                    R4Log.Warn(
+                        $"ExtractPlacedIngredients: duplicate detached ingredient for {DescribeJob(job)} " +
+                        $"thing={DescribeThingReference(extractedThing)}.");
+                    continue;
+                }
+
+                extractedIngredients.Add(extractedThing);
+            }
+
+            job.placedThings = null;
+            return extractedIngredients;
+        }
+
+        public static void DestroyExtractedIngredients(List<Thing> ingredients)
+        {
+            if (ingredients == null || ingredients.Count == 0)
+                return;
+
+            for (int i = 0; i < ingredients.Count; i++)
+            {
+                Thing thing = ingredients[i];
+                if (thing == null || thing.Destroyed)
+                    continue;
+
+                thing.Destroy();
+            }
+        }
+
+        public static void LogPlacedIngredientMismatch(Job job, List<Thing> extractedIngredients, List<ThingDefCountClass> expectedCosts)
+        {
+            if (expectedCosts == null || expectedCosts.Count == 0)
+            {
+                if (extractedIngredients != null && extractedIngredients.Count > 0)
+                {
+                    R4Log.Debug(
+                        $"ExtractPlacedIngredients: cleared unexpected detached ingredients for {DescribeJob(job)} " +
+                        $"extracted={DescribeThingList(extractedIngredients)}.");
+                }
+
                 return;
             }
 
-            // Build remaining-count table from expected costs
-            var remaining = new Dictionary<ThingDef, int>(expectedCosts.Count);
-            for (int i = 0; i < expectedCosts.Count; i++)
+            Dictionary<ThingDef, int> expected = BuildExpectedCountMap(expectedCosts);
+            Dictionary<ThingDef, int> extracted = BuildThingCountMap(extractedIngredients);
+
+            if (!CountMapsEqual(expected, extracted))
             {
-                var entry = expectedCosts[i];
-                if (entry.thingDef == null || entry.count <= 0) continue;
-                if (remaining.TryGetValue(entry.thingDef, out int existing))
-                    remaining[entry.thingDef] = existing + entry.count;
-                else
-                    remaining[entry.thingDef] = entry.count;
-            }
-
-            // Consume from placed things, matching by ThingDef
-            for (int i = 0; i < job.placedThings.Count; i++)
-            {
-                ThingCountClass ptc = job.placedThings[i];
-                if (ptc.thing == null || ptc.Count <= 0) continue;
-                if (!remaining.TryGetValue(ptc.thing.def, out int need)) continue;
-
-                int toConsume = Mathf.Min(need, ptc.Count);
-                toConsume = Mathf.Min(toConsume, ptc.thing.stackCount);
-
-                need -= toConsume;
-                if (need <= 0)
-                    remaining.Remove(ptc.thing.def);
-                else
-                    remaining[ptc.thing.def] = need;
-
-                if (toConsume >= ptc.thing.stackCount)
-                    ptc.thing.Destroy();
-                else
-                    ptc.thing.stackCount -= toConsume;
-            }
-
-            // Clear placed things after consumption
-            job.placedThings = null;
-
-            if (remaining.Count > 0)
-            {
-                var missing = new List<string>(remaining.Count);
-                foreach (var kv in remaining)
-                    missing.Add($"{kv.Key.defName}x{kv.Value}");
-                R4Log.Warn("ConsumeFromPlacedThings: not all expected ingredients found. " +
-                            "Missing: " + string.Join(", ", missing));
+                R4Log.Warn(
+                    $"ExtractPlacedIngredients: extracted ingredients did not match expected costs for {DescribeJob(job)}. " +
+                    $"expected={DescribeCosts(expectedCosts)} extracted={DescribeThingList(extractedIngredients)}");
             }
             else
             {
-                R4Log.Debug("ConsumeFromPlacedThings: consumed all expected ingredients successfully.");
+                R4Log.Debug(
+                    $"ExtractPlacedIngredients: extracted all expected ingredients successfully for {DescribeJob(job)}. " +
+                    $"extracted={DescribeThingList(extractedIngredients)}");
             }
         }
 
@@ -442,6 +486,22 @@ namespace RRRR
             return parts.Count == 0 ? "none" : string.Join(", ", parts);
         }
 
+        public static string DescribeThingList(List<Thing> things)
+        {
+            if (things == null || things.Count == 0)
+                return "none";
+
+            Dictionary<ThingDef, int> counts = BuildThingCountMap(things);
+            if (counts.Count == 0)
+                return "none";
+
+            var parts = new List<string>(counts.Count);
+            foreach (KeyValuePair<ThingDef, int> entry in counts)
+                parts.Add($"{entry.Key.defName}x{entry.Value}");
+
+            return string.Join(", ", parts);
+        }
+
         public static string DescribePlacedThings(Job job)
         {
             if (job?.placedThings == null || job.placedThings.Count == 0)
@@ -460,10 +520,84 @@ namespace RRRR
                 string location = entry.thing.Spawned
                     ? entry.thing.PositionHeld.ToString()
                     : "unspawned";
-                parts.Add($"{entry.thing.def.defName} tracked={entry.Count} stack={entry.thing.stackCount} at={location}");
+                parts.Add($"{entry.thing.def.defName}[{entry.thing.ThingID ?? entry.thing.GetUniqueLoadID()}] tracked={entry.Count} stack={entry.thing.stackCount} at={location}");
             }
 
             return string.Join("; ", parts);
+        }
+
+        private static Dictionary<ThingDef, int> BuildExpectedCountMap(List<ThingDefCountClass> expectedCosts)
+        {
+            var counts = new Dictionary<ThingDef, int>();
+            if (expectedCosts == null)
+                return counts;
+
+            for (int i = 0; i < expectedCosts.Count; i++)
+            {
+                ThingDefCountClass entry = expectedCosts[i];
+                if (entry?.thingDef == null || entry.count <= 0)
+                    continue;
+
+                if (counts.TryGetValue(entry.thingDef, out int existing))
+                    counts[entry.thingDef] = existing + entry.count;
+                else
+                    counts[entry.thingDef] = entry.count;
+            }
+
+            return counts;
+        }
+
+        private static Dictionary<ThingDef, int> BuildThingCountMap(List<Thing> things)
+        {
+            var counts = new Dictionary<ThingDef, int>();
+            if (things == null)
+                return counts;
+
+            for (int i = 0; i < things.Count; i++)
+            {
+                Thing thing = things[i];
+                if (thing?.def == null || thing.stackCount <= 0)
+                    continue;
+
+                if (counts.TryGetValue(thing.def, out int existing))
+                    counts[thing.def] = existing + thing.stackCount;
+                else
+                    counts[thing.def] = thing.stackCount;
+            }
+
+            return counts;
+        }
+
+        private static bool CountMapsEqual(Dictionary<ThingDef, int> expected, Dictionary<ThingDef, int> actual)
+        {
+            if (expected.Count != actual.Count)
+                return false;
+
+            foreach (KeyValuePair<ThingDef, int> entry in expected)
+            {
+                if (!actual.TryGetValue(entry.Key, out int actualCount) || actualCount != entry.Value)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static string DescribeJob(Job job)
+        {
+            if (job == null)
+                return "null job";
+
+            return $"{job.def?.defName ?? "null"}#{job.loadID}";
+        }
+
+        public static string DescribeThingReference(Thing thing)
+        {
+            if (thing == null)
+                return "null";
+
+            string location = thing.Spawned ? thing.PositionHeld.ToString() : "unspawned";
+            string uniqueId = thing.ThingID ?? thing.GetUniqueLoadID();
+            return $"{thing.def.defName}[{uniqueId}] stack={thing.stackCount} at={location}";
         }
 
         // ================================================================

@@ -47,7 +47,7 @@ namespace RRRR
                 IntVec3 cell = curJob.GetTarget(cellInd).Cell;
                 if (actor.carryTracker.CarriedThing == null)
                 {
-                    R4Log.Error(actor + " tried to place hauled thing in cell but is not hauling anything.");
+                    R4Log.Error($"PlaceHauledThingInCell: pawn={actor.LabelShort} jobId={curJob.loadID} tried to place hauled thing in cell but is not hauling anything.");
                     return;
                 }
 
@@ -118,7 +118,8 @@ namespace RRRR
                     }
 
                     R4Log.Debug(
-                        $"PlaceHauledThingInCell: direct drop failed for {curJob.def.defName} targetCell={cell} tracked={MaterialUtility.DescribePlacedThings(curJob)}");
+                        $"PlaceHauledThingInCell: pawn={actor.LabelShort} jobId={curJob.loadID} direct drop failed for {curJob.def.defName} " +
+                        $"targetCell={cell} tracked={MaterialUtility.DescribePlacedThings(curJob)}");
                 }
                 else
                 {
@@ -126,12 +127,15 @@ namespace RRRR
                     if (trackedThing == null || trackedAdded <= 0)
                     {
                         R4Log.Warn(
-                            $"PlaceHauledThingInCell: drop succeeded for {curJob.def.defName} at {cell} but no placed-action callback fired. Result={DescribeThing(resolvedThing)}");
+                            $"PlaceHauledThingInCell: pawn={actor.LabelShort} jobId={curJob.loadID} drop succeeded for {curJob.def.defName} at {cell} " +
+                            $"but no placed-action callback fired. Result={DescribeThing(resolvedThing)}");
                     }
                     else
                     {
                         R4Log.Debug(
-                            $"PlaceHauledThingInCell: tracked {trackedAdded} of {resolvedThing.def.defName} targetCell={cell} actual={DescribeThing(resolvedThing)} trackedNow={MaterialUtility.DescribePlacedThings(curJob)}");
+                            $"PlaceHauledThingInCell: pawn={actor.LabelShort} jobId={curJob.loadID} tracked {trackedAdded} of " +
+                            $"{resolvedThing?.def?.defName ?? "null"} ref={DescribeThingReference(resolvedThing)} targetCell={cell} " +
+                            $"actual={DescribeThing(resolvedThing)} trackedNow={MaterialUtility.DescribePlacedThings(curJob)}");
                     }
                 }
             };
@@ -149,6 +153,16 @@ namespace RRRR
 
             string location = thing.Spawned ? thing.PositionHeld.ToString() : "unspawned";
             return $"{thing.def.defName} stack={thing.stackCount} at={location}";
+        }
+
+        private static string DescribeThingReference(Thing thing)
+        {
+            if (thing == null)
+                return "null";
+
+            string location = thing.Spawned ? thing.PositionHeld.ToString() : "unspawned";
+            string uniqueId = thing.ThingID ?? thing.GetUniqueLoadID();
+            return $"{thing.def.defName}[{uniqueId}] stack={thing.stackCount} at={location}";
         }
     }
 }

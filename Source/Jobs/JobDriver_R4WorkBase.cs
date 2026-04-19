@@ -151,7 +151,7 @@ namespace RRRR
             yield return Toils_Jump.JumpIf(gotoBillGiver,
                 () => job.GetTargetQueue(IngredientInd).NullOrEmpty());
 
-            foreach (Toil t in JobDriver_DoBill.CollectIngredientsToils(
+            foreach (Toil t in R4CollectIngredientsToils.CollectIngredientsToils(
                 IngredientInd, BenchInd, CellInd,
                 subtractNumTakenFromJobCount: false,
                 failIfStackCountLessThanJobCount: false))
@@ -209,8 +209,13 @@ namespace RRRR
             {
                 if (pawn.carryTracker.CarriedThing != null)
                 {
-                    if (!MaterialUtility.TryPlaceCarriedThingOnBench(pawn, Bench, out Thing placedWorkItem))
+                    if (!R4WorkbenchPlacement.TryPlaceCarriedWorkItemAtBench(pawn, Bench, job, out Thing placedWorkItem, out string failReason))
+                    {
+                        R4Log.Warn(
+                            $"Work item placement failed for {job.def.defName}: pawn={pawn.LabelShort} jobId={job.loadID} " +
+                            $"reason={failReason ?? "unknown"} tracked={MaterialUtility.DescribePlacedThings(job)}");
                         EndJobWith(JobCondition.Incompletable);
+                    }
                     else
                         R4Log.Debug(
                             $"Work item placed for {job.def.defName}: {DescribeItemState(WorkItem)} " +
@@ -344,27 +349,47 @@ namespace RRRR
                 Thing item = WorkItem;
                 if (item == null || item.Destroyed)
                 {
-                    R4Log.Warn($"Finish toil aborted for {job.def.defName}: work item was null or destroyed.");
+                    R4Log.Warn($"Finish toil aborted for {job.def.defName}: {DescribeJobContext(item)} work item was null or destroyed.");
                     return;
                 }
 
-                // Consume ingredients from job.placedThings
                 List<ThingDefCountClass> cycleCost = GetCycleCost(item);
                 int hpBefore = item.def.useHitPoints ? item.HitPoints : -1;
 
                 R4Log.Debug(
-                    $"Finish toil {job.def.defName}: item={DescribeItemState(item)} " +
+                    $"Finish toil {job.def.defName}: {DescribeJobContext(item)} " +
                     $"cycleCost={MaterialUtility.DescribeCosts(cycleCost)} " +
                     $"tracked={MaterialUtility.DescribePlacedThings(job)}");
 
-                if (cycleCost.Count > 0)
-                    MaterialUtility.ConsumeFromPlacedThings(job, cycleCost);
+                List<Thing> extractedIngredients;
+                if (cycleCost.Count == 0)
+                {
+                    extractedIngredients = new List<Thing>();
+                    if (job.placedThings != null && job.placedThings.Count > 0)
+                    {
+                        R4Log.Debug(
+                            $"Finish ingredients {job.def.defName}: {DescribeJobContext(item)} clearing tracked refs for zero-cost cycle. " +
+                            $"tracked={MaterialUtility.DescribePlacedThings(job)}");
+                    }
+
+                    job.placedThings = null;
+                }
+                else
+                {
+                    extractedIngredients = MaterialUtility.ExtractPlacedIngredients(job);
+                }
+
+                R4Log.Debug(
+                    $"Finish ingredients {job.def.defName}: {DescribeJobContext(item)} " +
+                    $"extracted={MaterialUtility.DescribeThingList(extractedIngredients)}");
+                MaterialUtility.LogPlacedIngredientMismatch(job, extractedIngredients, cycleCost);
+                MaterialUtility.DestroyExtractedIngredients(extractedIngredients);
 
                 // Apply the subclass-specific work result
                 ApplyWorkResult(item, pawn);
 
                 R4Log.Debug(
-                    $"Finish result {job.def.defName}: beforeHP={(hpBefore >= 0 ? hpBefore.ToString() : "n/a")} " +
+                    $"Finish result {job.def.defName}: {DescribeJobContext(item)} beforeHP={(hpBefore >= 0 ? hpBefore.ToString() : "n/a")} " +
                     $"after={DescribeItemState(item)} destroyed={item.Destroyed}");
 
                 // Check if item was destroyed during ApplyWorkResult (repair failure)
@@ -425,6 +450,19 @@ namespace RRRR
                 : item.LabelShort;
         }
 
+        private string DescribeJobContext(Thing item)
+        {
+            string benchLabel = Bench?.LabelShort ?? "null";
+            string benchPos = Bench == null
+                ? "null"
+                : Bench.Spawned ? Bench.PositionHeld.ToString() : "unspawned";
+            string itemPos = item == null
+                ? "null"
+                : item.Spawned ? item.PositionHeld.ToString() : "unspawned";
+
+            return $"pawn={pawn.LabelShort} jobId={job.loadID} bench={benchLabel} benchPos={benchPos} item={DescribeItemState(item)} itemPos={itemPos}";
+        }
+
         private string GetGlobalFailReason(Thing item)
         {
             Thing benchThing = job.GetTarget(BenchInd).Thing;
@@ -470,13 +508,13 @@ namespace RRRR
                     return $"tracked thing #{i} is null";
 
                 if (!thing.Spawned && (thingOwner == null || !thingOwner.Contains(thing)))
-                    return $"tracked thing {thing.def.defName} is not spawned and not inside bill giver";
+                    return $"tracked thing {MaterialUtility.DescribeThingReference(thing)} is not spawned and not inside bill giver";
 
                 if (thing.MapHeld != pawn.Map)
-                    return $"tracked thing {thing.def.defName} moved to another map or holder";
+                    return $"tracked thing {MaterialUtility.DescribeThingReference(thing)} moved to another map or holder";
 
                 if (!job.ignoreForbidden && thing.IsForbidden(pawn))
-                    return $"tracked thing {thing.def.defName} became forbidden";
+                    return $"tracked thing {MaterialUtility.DescribeThingReference(thing)} became forbidden";
             }
 
             return null;

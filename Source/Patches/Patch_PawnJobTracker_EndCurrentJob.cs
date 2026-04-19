@@ -14,11 +14,12 @@ namespace RRRR
             if (curJob?.def != R4DefOf.RRRR_Repair && curJob?.def != R4DefOf.RRRR_Clean)
                 return;
 
+            Pawn pawn = __instance.curDriver?.pawn;
             string toil = __instance.curDriver?.CurToilString ?? "null";
             Thing workItem = GetWorkItem(curJob);
             R4Log.Debug(
-                $"EndCurrentJob {curJob.def.defName}: condition={condition} toil={toil} " +
-                $"item={DescribeItem(workItem)} tracked={DescribePlacedThings(curJob)}");
+                $"EndCurrentJob {curJob.def.defName}: pawn={pawn?.LabelShort ?? "null"} jobId={curJob.loadID} condition={condition} toil={toil} " +
+                $"item={DescribeItem(workItem)} tracked={MaterialUtility.DescribePlacedThings(curJob)}");
         }
 
         private static Thing GetWorkItem(Job job)
@@ -40,26 +41,5 @@ namespace RRRR
                 : $"{thing.LabelShort} spawned={thing.Spawned} pos={thing.PositionHeld}";
         }
 
-        private static string DescribePlacedThings(Job job)
-        {
-            if (job?.placedThings == null || job.placedThings.Count == 0)
-                return "none";
-
-            var parts = new List<string>(job.placedThings.Count);
-            for (int i = 0; i < job.placedThings.Count; i++)
-            {
-                ThingCountClass entry = job.placedThings[i];
-                if (entry?.thing == null)
-                {
-                    parts.Add("<null>");
-                    continue;
-                }
-
-                string location = entry.thing.Spawned ? entry.thing.PositionHeld.ToString() : "unspawned";
-                parts.Add($"{entry.thing.def.defName} tracked={entry.Count} stack={entry.thing.stackCount} at={location}");
-            }
-
-            return string.Join("; ", parts);
-        }
     }
 }

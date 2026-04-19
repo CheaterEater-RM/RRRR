@@ -45,6 +45,7 @@ namespace RRRR
             Job job = JobMaker.MakeJob(R4DefOf.RRRR_Clean, bench);
             job.count        = 1;
             job.haulMode     = HaulMode.ToCellNonStorage;
+            job.placedThings = null;
             job.targetQueueA = new List<LocalTargetInfo> { t };
             job.targetQueueB = new List<LocalTargetInfo>();
             job.countQueue   = new List<int>();
