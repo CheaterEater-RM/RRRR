@@ -1,0 +1,494 @@
+using System.Collections.Generic;
+using RimWorld;
+using UnityEngine;
+using Verse;
+using Verse.AI;
+
+namespace RRRR
+{
+    /// <summary>
+    /// Abstract base class for R4 workbench job drivers (Repair, Clean).
+    /// Implements the full toil sequence with vanilla-aligned fail conditions,
+    /// tick timing (tickAction + tickIntervalAction), ingredient tracking via
+    /// job.placedThings, and bench usage (UsedThisTick). Subclasses override
+    /// only the work-specific hooks.
+    ///
+    /// Target slots (matches vanilla JobDriver_DoBill):
+    ///   TargetA        = bench (stable, never overwritten)
+    ///   TargetQueueA[0]= work item (weapon/apparel being repaired/cleaned)
+    ///   TargetQueueB   = ingredient stacks
+    ///   TargetC        = ingredient placement cell
+    /// </summary>
+    public abstract class JobDriver_R4WorkBase : JobDriver
+    {
+        protected const TargetIndex BenchInd      = TargetIndex.A;
+        protected const TargetIndex IngredientInd = TargetIndex.B;
+        protected const TargetIndex CellInd       = TargetIndex.C;
+
+        protected float cycleWorkLeft;
+        protected float cycleWorkTotal;
+
+        protected Thing Bench        => job.GetTarget(BenchInd).Thing;
+        protected bool  IsBillDriven => job.bill != null;
+
+        private Thing _cachedWorkItem;
+        protected Thing WorkItem
+        {
+            get
+            {
+                if (_cachedWorkItem == null || _cachedWorkItem.Destroyed)
+                {
+                    var queue = job.GetTargetQueue(BenchInd);
+                    if (queue != null && queue.Count > 0)
+                        _cachedWorkItem = queue[0].Thing;
+                }
+                return _cachedWorkItem;
+            }
+        }
+
+        // ── Abstract hooks for subclasses ──────────────────────────────────
+        protected abstract DesignationDef WorkDesignationDef { get; }
+        protected abstract float CalculateTotalWork(Thing item);
+        protected abstract void ApplyWorkResult(Thing item, Pawn worker);
+        protected abstract List<ThingDefCountClass> GetCycleCost(Thing item);
+        protected abstract bool ShouldContinueWorking(Thing item);
+        protected abstract bool IsWorkItemStillValid(Thing item);
+        protected abstract float GetSkillXpPerTick();
+        protected abstract float GetSkillSpeedBonus(int skillLevel);
+        protected abstract string GetJobReportKey();
+
+        // ── Virtual hooks with defaults ────────────────────────────────────
+        protected virtual void OnItemDestroyed(Thing item) { }
+
+        // ── Overrides ──────────────────────────────────────────────────────
+
+        public override string GetReport()
+        {
+            Thing item  = WorkItem;
+            Thing bench = Bench;
+            string itemLabel  = item  != null ? item.LabelShort  : "unknown".Translate().ToString();
+            string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
+            return GetJobReportKey().Translate(itemLabel, benchLabel);
+        }
+
+        public override bool TryMakePreToilReservations(bool errorOnFailed)
+        {
+            // Reserve the bench
+            if (!pawn.Reserve(job.GetTarget(BenchInd), job, 1, -1, null, errorOnFailed))
+                return false;
+
+            // Reserve interaction cell (matches vanilla JobDriver_DoBill)
+            Thing bench = Bench;
+            if (bench != null && bench.def.hasInteractionCell)
+            {
+                if (!pawn.ReserveSittableOrSpot(bench.InteractionCell, job, errorOnFailed))
+                    return false;
+            }
+
+            // Reserve the work item
+            var itemQueue = job.GetTargetQueue(BenchInd);
+            if (itemQueue != null && itemQueue.Count > 0)
+            {
+                Thing item = itemQueue[0].Thing;
+                if (item != null && !pawn.Reserve(item, job, 1, -1, null, errorOnFailed))
+                    return false;
+            }
+
+            // Reserve as many ingredients as possible
+            pawn.ReserveAsManyAsPossible(job.GetTargetQueue(IngredientInd), job);
+            return true;
+        }
+
+        public override void ExposeData()
+        {
+            base.ExposeData();
+            Scribe_Values.Look(ref cycleWorkLeft,  "cycleWorkLeft",  0f);
+            Scribe_Values.Look(ref cycleWorkTotal, "cycleWorkTotal", 0f);
+        }
+
+        protected override IEnumerable<Toil> MakeNewToils()
+        {
+            // ── Global fail conditions (matches vanilla JobDriver_DoBill) ──
+
+            // Bench must remain spawned
+            AddEndCondition(delegate
+            {
+                Thing thing = GetActor().jobs.curJob.GetTarget(BenchInd).Thing;
+                return (!(thing is Building) || thing.Spawned)
+                    ? JobCondition.Ongoing
+                    : JobCondition.Incompletable;
+            });
+
+            // Bench on fire
+            this.FailOnBurningImmobile(BenchInd);
+
+            // Bench usability + work item validity + bill/designation checks
+            this.FailOn(delegate
+            {
+                Thing item = WorkItem;
+                string failReason = GetGlobalFailReason(item);
+                if (failReason != null)
+                {
+                    R4Log.Warn($"Global fail {job.def.defName}: {failReason}. item={DescribeItemState(item)} tracked={MaterialUtility.DescribePlacedThings(job)}");
+                    return true;
+                }
+
+                return false;
+            });
+
+            Toil startToil = ToilMaker.MakeToil("R4_Work_Start");
+            startToil.initAction = delegate
+            {
+                if (IsBillDriven)
+                    job.bill.Notify_DoBillStarted(pawn);
+            };
+            yield return startToil;
+
+            // ── Phase 1: Gather ingredients ──
+
+            Toil gotoBillGiver = Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
+
+            yield return Toils_Jump.JumpIf(gotoBillGiver,
+                () => job.GetTargetQueue(IngredientInd).NullOrEmpty());
+
+            foreach (Toil t in JobDriver_DoBill.CollectIngredientsToils(
+                IngredientInd, BenchInd, CellInd,
+                subtractNumTakenFromJobCount: false,
+                failIfStackCountLessThanJobCount: false))
+            {
+                yield return t;
+            }
+
+            // ── Phase 2: Go to bench, haul work item ──
+
+            yield return gotoBillGiver;
+
+            Toil gotoItem = ToilMaker.MakeToil("R4_Work_GotoItem");
+            gotoItem.defaultCompleteMode = ToilCompleteMode.PatherArrival;
+            gotoItem.initAction = delegate
+            {
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+                pawn.pather.StartPath(item, PathEndMode.ClosestTouch);
+            };
+            gotoItem.AddFailCondition(() =>
+            {
+                Thing item = WorkItem;
+                return item == null || item.Destroyed || item.IsForbidden(pawn);
+            });
+            yield return gotoItem;
+
+            Toil carryItem = ToilMaker.MakeToil("R4_Work_CarryItem");
+            carryItem.defaultCompleteMode = ToilCompleteMode.Instant;
+            carryItem.initAction = delegate
+            {
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+                if (pawn.carryTracker.CarriedThing == null)
+                {
+                    int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
+                    if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
+                        EndJobWith(JobCondition.Incompletable);
+                }
+            };
+            yield return carryItem;
+
+            yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
+
+            Toil dropItem = ToilMaker.MakeToil("R4_Work_DropItem");
+            dropItem.defaultCompleteMode = ToilCompleteMode.Instant;
+            dropItem.initAction = delegate
+            {
+                if (pawn.carryTracker.CarriedThing != null)
+                {
+                    if (!MaterialUtility.TryPlaceCarriedThingOnBench(pawn, Bench, out Thing placedWorkItem))
+                        EndJobWith(JobCondition.Incompletable);
+                    else
+                        R4Log.Debug(
+                            $"Work item placed for {job.def.defName}: {DescribeItemState(WorkItem)} " +
+                            $"placedAt={DescribeThing(placedWorkItem)} tracked={MaterialUtility.DescribePlacedThings(job)}");
+                }
+            };
+            yield return dropItem;
+
+            // ── Phase 3: Work one cycle ──
+
+            Toil workToil = ToilMaker.MakeToil("R4_Work_DoWork");
+            workToil.defaultCompleteMode = ToilCompleteMode.Never;
+            workToil.handlingFacing      = true;
+            workToil.activeSkill         = () => SkillDefOf.Crafting;
+            workToil.FailOnCannotTouch(BenchInd, PathEndMode.InteractionCell);
+            workToil.AddFailCondition(() =>
+            {
+                string failReason = GetPlacedThingFailReason(BenchInd);
+                if (failReason != null)
+                {
+                    R4Log.Warn($"Placed-things fail {job.def.defName}: {failReason}. tracked={MaterialUtility.DescribePlacedThings(job)}");
+                    return true;
+                }
+
+                return false;
+            });
+
+            workToil.initAction = delegate
+            {
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+                if (!IsWorkItemStillValid(item))
+                {
+                    RemoveDesignation(item);
+                    EndJobWith(JobCondition.Succeeded);
+                    return;
+                }
+                cycleWorkTotal = CalculateTotalWork(item);
+                if (cycleWorkLeft <= 0f)
+                    cycleWorkLeft = cycleWorkTotal;
+
+                R4Log.Debug(
+                    $"Work start {job.def.defName}: bench={Bench?.LabelShort ?? "null"} " +
+                    $"item={DescribeItemState(item)} queued={DescribeQueuedIngredients()} " +
+                    $"cycleCost={MaterialUtility.DescribeCosts(GetCycleCost(item))} " +
+                    $"tracked={MaterialUtility.DescribePlacedThings(job)}");
+            };
+
+            // Fires every tick — bench usage, facing, fuel consumption
+            workToil.tickAction = delegate
+            {
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+                pawn.rotationTracker.FaceTarget(Bench);
+                if (Bench is IBillGiverWithTickAction tickBench)
+                    tickBench.UsedThisTick();
+
+                AdvanceWork(item, 1);
+            };
+
+            // Fires at game-speed-adjusted intervals — work progress, XP, override checks
+            workToil.tickIntervalAction = delegate(int delta)
+            {
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+
+                AdvanceWork(item, delta);
+            };
+
+            void AdvanceWork(Thing item, int delta)
+            {
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+
+                if (IsBillDriven)
+                    job.bill.Notify_PawnDidWork(pawn);
+
+                float speed       = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
+                float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
+                int   skillLevel  = pawn.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+                float skillBonus  = GetSkillSpeedBonus(skillLevel);
+
+                float combinedSpeed = speed * benchFactor * skillBonus;
+                if (DebugSettings.fastCrafting)
+                    combinedSpeed *= 30f;
+
+                cycleWorkLeft -= combinedSpeed * delta;
+
+                pawn.skills?.Learn(SkillDefOf.Crafting, GetSkillXpPerTick() * delta);
+                pawn.GainComfortFromCellIfPossible(delta, chairsOnly: true);
+
+                if (cycleWorkLeft <= 0f)
+                {
+                    R4Log.Debug(
+                        $"Work cycle complete {job.def.defName}: item={DescribeItemState(item)} tracked={MaterialUtility.DescribePlacedThings(job)}");
+                    ReadyForNextToil();
+                }
+                else if ((delta == 1 && pawn.IsHashIntervalTick(1000)) ||
+                         (delta > 1 && pawn.IsHashIntervalTick(1000, delta)))
+                {
+                    pawn.jobs.CheckForJobOverride();
+                }
+            }
+
+            workToil.WithProgressBar(BenchInd,
+                () => cycleWorkTotal <= 0f ? 0f : 1f - (cycleWorkLeft / cycleWorkTotal));
+
+            yield return workToil;
+
+            // ── Phase 4: Apply result, consume ingredients ──
+
+            Toil finishToil = ToilMaker.MakeToil("R4_Work_Finish");
+            finishToil.defaultCompleteMode = ToilCompleteMode.Instant;
+            finishToil.initAction = delegate
+            {
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed)
+                {
+                    R4Log.Warn($"Finish toil aborted for {job.def.defName}: work item was null or destroyed.");
+                    return;
+                }
+
+                // Consume ingredients from job.placedThings
+                List<ThingDefCountClass> cycleCost = GetCycleCost(item);
+                int hpBefore = item.def.useHitPoints ? item.HitPoints : -1;
+
+                R4Log.Debug(
+                    $"Finish toil {job.def.defName}: item={DescribeItemState(item)} " +
+                    $"cycleCost={MaterialUtility.DescribeCosts(cycleCost)} " +
+                    $"tracked={MaterialUtility.DescribePlacedThings(job)}");
+
+                if (cycleCost.Count > 0)
+                    MaterialUtility.ConsumeFromPlacedThings(job, cycleCost);
+
+                // Apply the subclass-specific work result
+                ApplyWorkResult(item, pawn);
+
+                R4Log.Debug(
+                    $"Finish result {job.def.defName}: beforeHP={(hpBefore >= 0 ? hpBefore.ToString() : "n/a")} " +
+                    $"after={DescribeItemState(item)} destroyed={item.Destroyed}");
+
+                // Check if item was destroyed during ApplyWorkResult (repair failure)
+                if (item.Destroyed || (item.def.useHitPoints && item.HitPoints <= 0))
+                {
+                    OnItemDestroyed(item);
+                    return;
+                }
+
+                // Remove designation if work is complete
+                if (!ShouldContinueWorking(item))
+                    RemoveDesignation(item);
+
+                // Bill notification
+                if (IsBillDriven)
+                    job.bill.Notify_IterationCompleted(pawn, new List<Thing> { item });
+            };
+
+            yield return finishToil;
+        }
+
+        // ── Helpers ────────────────────────────────────────────────────────
+
+        protected void RemoveDesignation(Thing item)
+        {
+            if (item == null || item.Map == null) return;
+            var des = pawn.Map.designationManager.DesignationOn(item, WorkDesignationDef);
+            if (des != null)
+                pawn.Map.designationManager.RemoveDesignation(des);
+        }
+
+        private string DescribeQueuedIngredients()
+        {
+            List<LocalTargetInfo> queue = job.GetTargetQueue(IngredientInd);
+            if (queue.NullOrEmpty())
+                return "none";
+
+            var parts = new List<string>(queue.Count);
+            for (int i = 0; i < queue.Count; i++)
+            {
+                Thing thing = queue[i].Thing;
+                int count = (job.countQueue != null && i < job.countQueue.Count)
+                    ? job.countQueue[i]
+                    : thing?.stackCount ?? 0;
+                parts.Add($"{thing?.def?.defName ?? "null"}x{count}");
+            }
+
+            return string.Join(", ", parts);
+        }
+
+        private static string DescribeItemState(Thing item)
+        {
+            if (item == null)
+                return "null";
+
+            return item.def.useHitPoints
+                ? $"{item.LabelShort} hp={item.HitPoints}/{item.MaxHitPoints}"
+                : item.LabelShort;
+        }
+
+        private string GetGlobalFailReason(Thing item)
+        {
+            Thing benchThing = job.GetTarget(BenchInd).Thing;
+            if (benchThing is IBillGiver billGiver && !billGiver.CurrentlyUsableForBills())
+                return "bench not currently usable for bills";
+
+            if (item == null)
+                return "work item is null";
+
+            if (item.Destroyed)
+                return "work item destroyed";
+
+            if (!IsWorkItemStillValid(item))
+                return "work item no longer valid for this job";
+
+            if (IsBillDriven)
+            {
+                if (job.bill.DeletedOrDereferenced)
+                    return "bill deleted or dereferenced";
+                if (job.bill.suspended)
+                    return "bill suspended";
+                return null;
+            }
+
+            if (item.Map != null && item.Map.designationManager.DesignationOn(item, WorkDesignationDef) == null)
+                return $"missing {WorkDesignationDef.defName} designation";
+
+            return null;
+        }
+
+        private string GetPlacedThingFailReason(TargetIndex containerIndex)
+        {
+            if (job.placedThings == null)
+                return null;
+
+            for (int i = 0; i < job.placedThings.Count; i++)
+            {
+                ThingCountClass thingCountClass = job.placedThings[i];
+                Thing thing = thingCountClass?.thing;
+                ThingOwner thingOwner = job.GetTarget(containerIndex).Thing?.TryGetInnerInteractableThingOwner();
+
+                if (thing == null)
+                    return $"tracked thing #{i} is null";
+
+                if (!thing.Spawned && (thingOwner == null || !thingOwner.Contains(thing)))
+                    return $"tracked thing {thing.def.defName} is not spawned and not inside bill giver";
+
+                if (thing.MapHeld != pawn.Map)
+                    return $"tracked thing {thing.def.defName} moved to another map or holder";
+
+                if (!job.ignoreForbidden && thing.IsForbidden(pawn))
+                    return $"tracked thing {thing.def.defName} became forbidden";
+            }
+
+            return null;
+        }
+
+        private static string DescribeThing(Thing thing)
+        {
+            if (thing == null)
+                return "null";
+
+            string location = thing.Spawned ? thing.PositionHeld.ToString() : "unspawned";
+            return $"{thing.def.defName} stack={thing.stackCount} at={location}";
+        }
+    }
+}

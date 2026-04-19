@@ -26,7 +26,9 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `WorkGiver_R4Recycle` | Designation-based: scans for designated items, creates recycle jobs (per work type) |
 | `WorkGiver_R4Repair` | Designation-based: scans for items needing repair, creates repair jobs |
 | `WorkGiver_R4Clean` | Designation-based: scans for tainted apparel, creates clean jobs |
-| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling |
+| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling; clears stale bench ingredients and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `WorkGiver_R4CleanBill` | Bill-based: custom WorkGiver for clean bills with material hauling; clears stale bench ingredients and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `JobDriver_R4WorkBase` | Shared base class for Repair and Clean job drivers; centralizes work toil timing, fail conditions, and ingredient handling |
 | `RecipeWorker_R4Recycle` | Bill-based: defers item destruction, skill-based product calculation |
 | `RecipeWorker_R4Repair` | Bill-based: prevents bill ingredient destruction; actual repair logic runs in `JobDriver_R4Repair` |
 | `RecipeWorker_R4Clean` | Bill-based: removes taint, leaves item on bench |
@@ -42,12 +44,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `Designator_RepairThing` | Orders menu designator for drag-select repair |
 | `Designator_CleanThing` | Orders menu designator for drag-select taint cleaning |
 
-### Harmony Patches (3 total)
+### Harmony Patches (4 total)
 
 | Target | Type | Purpose |
 |---|---|---|
 | `Thing.GetGizmos` | Postfix | Inject per-item R4 gizmo buttons (recycle, repair, clean) with rich tooltips |
 | `Building_WorkTable.SpawnSetup` | Postfix | Strip stale bills (e.g. vanilla SmeltWeapon) on load/placement for save compat |
+| `Toils_Haul.PlaceHauledThingInCell` | Postfix | Track placed ingredient stacks for R4 repair/clean jobs via `job.placedThings` and enable correct ingredient consumption |
 | `WorkGiver_DoBill.JobOnThing` | Postfix | Null out R4 repair and clean jobs so vanilla bill search cannot run in parallel with the custom R4 bill WorkGivers |
 
 ### Designation Flow
@@ -68,7 +71,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 Each designation action (recycle, repair, clean) is registered under **three WorkGiverDefs** — Crafting, Smithing, Tailoring — so the work tab column matches the bench type. The shared `WorkGiver_R4DesignationBase.FindBench` filters candidates to benches whose WorkTypeDef matches the WorkGiver's own `def.workType`.
 
-Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path.
+Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path. Repair and Clean bill WorkGivers also clear stale bill-giver ingredients before creating a new job and set `job.haulMode = HaulMode.ToCellNonStorage` so the bench target remains stable throughout the custom bill pipeline.
 
 ### Workbench Routing
 
@@ -184,6 +187,7 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 - Clean bills: custom `WorkGiver_R4CleanBill` → custom `JobDriver_R4Clean` (uses `JobDriver_DoBill.CollectIngredientsToils`)
 - Vanilla `WorkGiver_DoBill` is allowed to search normally but any resulting R4 repair or clean job is nulled out by Harmony so only the custom bill paths execute
 - `RecipeWorker.ConsumeIngredient` overridden to prevent item destruction
+- `JobDriver_R4Repair` and `JobDriver_R4Clean` now inherit from `JobDriver_R4WorkBase`, aligning their work loop with vanilla `JobDriver_DoBill` and centralizing `tickAction`/`tickIntervalAction` semantics
 - `RecipeWorker.Notify_IterationCompleted` handles recycle/clean completion logic; repair completion is handled in `JobDriver_R4Repair`
 
 ## Settings
@@ -226,8 +230,8 @@ RRRR\
     ├── Defs\                 ← R4DefOf
     ├── Designators\          ← Designator_RecycleThing, Designator_RepairThing, Designator_CleanThing
     ├── Filters\              ← SpecialThingFilterWorker_Damaged, SpecialThingFilterWorker_Tainted
-    ├── Jobs\                 ← JobDrivers (Recycle, Repair, Clean), WorkGivers (designation + bill)
-    ├── Patches\              ← Harmony patches (Thing.GetGizmos, Building_WorkTable.SpawnSetup)
+    ├── Jobs\                 ← JobDrivers (Recycle, Repair, Clean, shared Repair/Clean base), WorkGivers (designation + bill)
+    ├── Patches\              ← Harmony patches (Thing.GetGizmos, Building_WorkTable.SpawnSetup, PlaceHauledThingInCell)
     ├── RecipeWorkers\        ← RecipeWorker_R4Recycle, RecipeWorker_R4Repair, RecipeWorker_R4Clean
     └── Utility\              ← MaterialUtility, WorkbenchRouter, SkillUtility
 ```

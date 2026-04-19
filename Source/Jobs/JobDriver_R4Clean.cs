@@ -2,203 +2,52 @@ using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
 using Verse;
-using Verse.AI;
 
 namespace RRRR
 {
-    public class JobDriver_R4Clean : JobDriver
+    public class JobDriver_R4Clean : JobDriver_R4WorkBase
     {
-        private const TargetIndex BenchInd      = TargetIndex.A;
-        private const TargetIndex IngredientInd = TargetIndex.B;
-        private const TargetIndex CellInd       = TargetIndex.C;
+        protected override DesignationDef WorkDesignationDef => R4DefOf.R4_Clean;
 
-        private float workLeft;
-        private float totalWork;
+        protected override string GetJobReportKey() => "R4_JobReport_Clean";
 
-        private Thing Bench        => job.GetTarget(BenchInd).Thing;
-        private bool  IsBillDriven => job.bill != null;
-
-        private Thing _cachedItem;
-        private Thing CleanItem
+        protected override bool IsWorkItemStillValid(Thing item)
         {
-            get
+            return item is Apparel apparel && apparel.WornByCorpse;
+        }
+
+        protected override float CalculateTotalWork(Thing item)
+        {
+            float workToMake = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
+            if (workToMake <= 0f) workToMake = 1000f;
+            return Mathf.Clamp(workToMake * 0.15f, 300f, 1500f);
+        }
+
+        protected override List<ThingDefCountClass> GetCycleCost(Thing item)
+        {
+            return MaterialUtility.GetCleanCost(item);
+        }
+
+        protected override bool ShouldContinueWorking(Thing item)
+        {
+            // Single-shot operation — never continue after one cycle
+            return false;
+        }
+
+        protected override float GetSkillXpPerTick() => 0.08f;
+
+        protected override float GetSkillSpeedBonus(int skillLevel)
+        {
+            return 1f + (skillLevel * 0.03f);
+        }
+
+        protected override void ApplyWorkResult(Thing item, Pawn worker)
+        {
+            if (item is Apparel apparel)
             {
-                if (_cachedItem == null || _cachedItem.Destroyed)
-                {
-                    var queue = job.GetTargetQueue(BenchInd);
-                    if (queue != null && queue.Count > 0)
-                        _cachedItem = queue[0].Thing;
-                }
-                return _cachedItem;
+                apparel.WornByCorpse = false;
+                apparel.Notify_ColorChanged();
             }
-        }
-
-        public override string GetReport()
-        {
-            Thing item  = CleanItem;
-            Thing bench = Bench;
-            string itemLabel  = item  != null ? item.LabelShort  : "unknown".Translate().ToString();
-            string benchLabel = bench != null ? bench.LabelShort : "unknown".Translate().ToString();
-            return "R4_JobReport_Clean".Translate(itemLabel, benchLabel);
-        }
-
-        public override bool TryMakePreToilReservations(bool errorOnFailed)
-        {
-            if (!pawn.Reserve(job.GetTarget(BenchInd), job, 1, -1, null, errorOnFailed))
-                return false;
-
-            var itemQueue = job.GetTargetQueue(BenchInd);
-            if (itemQueue != null && itemQueue.Count > 0)
-            {
-                Thing item = itemQueue[0].Thing;
-                if (item != null && !pawn.Reserve(item, job, 1, -1, null, errorOnFailed))
-                    return false;
-            }
-
-            pawn.ReserveAsManyAsPossible(job.GetTargetQueue(IngredientInd), job);
-            return true;
-        }
-
-        public override void ExposeData()
-        {
-            base.ExposeData();
-            Scribe_Values.Look(ref workLeft,  "workLeft",  0f);
-            Scribe_Values.Look(ref totalWork, "totalWork", 0f);
-        }
-
-        protected override IEnumerable<Toil> MakeNewToils()
-        {
-            this.FailOnDestroyedNullOrForbidden(BenchInd);
-
-            this.FailOn(delegate
-            {
-                Thing item = CleanItem;
-                if (item == null || item.Destroyed) return true;
-                if (!(item is Apparel apparel) || !apparel.WornByCorpse) return true;
-                if (IsBillDriven) return job.bill.DeletedOrDereferenced || job.bill.suspended;
-                if (item.Map != null && item.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean) == null)
-                    return true;
-                return false;
-            });
-
-            // ── Phase 1: Gather ingredients ──
-            Toil gotoBillGiver = Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
-
-            yield return Toils_Jump.JumpIf(gotoBillGiver,
-                () => job.GetTargetQueue(IngredientInd).NullOrEmpty());
-
-            foreach (Toil t in JobDriver_DoBill.CollectIngredientsToils(
-                IngredientInd, BenchInd, CellInd,
-                subtractNumTakenFromJobCount: false,
-                failIfStackCountLessThanJobCount: false))
-            {
-                yield return t;
-            }
-
-            // ── Phase 2: Go to bench, haul apparel ──
-            yield return gotoBillGiver;
-
-            Toil gotoItem = ToilMaker.MakeToil("R4_Clean_GotoItem");
-            gotoItem.defaultCompleteMode = ToilCompleteMode.PatherArrival;
-            gotoItem.initAction = delegate
-            {
-                Thing item = CleanItem;
-                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
-                pawn.pather.StartPath(item, PathEndMode.ClosestTouch);
-            };
-            yield return gotoItem;
-
-            Toil carryItem = ToilMaker.MakeToil("R4_Clean_CarryItem");
-            carryItem.defaultCompleteMode = ToilCompleteMode.Instant;
-            carryItem.initAction = delegate
-            {
-                Thing item = CleanItem;
-                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
-                if (pawn.carryTracker.CarriedThing == null)
-                {
-                    int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
-                    if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
-                        EndJobWith(JobCondition.Incompletable);
-                }
-            };
-            yield return carryItem;
-
-            yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
-
-            Toil dropItem = ToilMaker.MakeToil("R4_Clean_DropItem");
-            dropItem.defaultCompleteMode = ToilCompleteMode.Instant;
-            dropItem.initAction = delegate
-            {
-                if (pawn.carryTracker.CarriedThing != null)
-                {
-                    if (!MaterialUtility.TryPlaceCarriedThingOnBench(pawn, Bench, out _))
-                        EndJobWith(JobCondition.Incompletable);
-                }
-            };
-            yield return dropItem;
-
-            // ── Phase 3: Work ──
-            Toil workToil = ToilMaker.MakeToil("R4_Clean_Work");
-            workToil.defaultCompleteMode = ToilCompleteMode.Never;
-            workToil.handlingFacing      = true;
-            workToil.activeSkill         = () => SkillDefOf.Crafting;
-            workToil.FailOnCannotTouch(BenchInd, PathEndMode.InteractionCell);
-
-            workToil.initAction = delegate
-            {
-                Thing item = CleanItem;
-                if (item == null || item.Destroyed) { EndJobWith(JobCondition.Incompletable); return; }
-                float workToMake = item.def.GetStatValueAbstract(StatDefOf.WorkToMake, item.Stuff);
-                if (workToMake <= 0f) workToMake = 1000f;
-                totalWork = Mathf.Clamp(workToMake * 0.15f, 300f, 1500f);
-                if (workLeft <= 0f) workLeft = totalWork;
-            };
-
-            workToil.tickAction = delegate
-            {
-                pawn.rotationTracker.FaceTarget(Bench);
-                float speed       = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed,        true);
-                float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
-                int skillLevel    = pawn?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-                float skillBonus  = 1f + (skillLevel * 0.03f);
-                workLeft -= speed * benchFactor * skillBonus;
-                pawn.skills?.Learn(SkillDefOf.Crafting, 0.08f);
-                if (workLeft <= 0f) ReadyForNextToil();
-            };
-
-            workToil.WithProgressBar(BenchInd,
-                () => totalWork <= 0f ? 0f : 1f - (workLeft / totalWork));
-
-            yield return workToil;
-
-            // ── Phase 4: Consume ingredients, remove taint ──
-            Toil finishToil = ToilMaker.MakeToil("R4_Clean_Finish");
-            finishToil.defaultCompleteMode = ToilCompleteMode.Instant;
-            finishToil.initAction = delegate
-            {
-                Thing item = CleanItem;
-                if (item == null || item.Destroyed)
-                    return;
-
-                // Consume only the expected clean materials, not everything on bench cells
-                var cleanCost = MaterialUtility.GetCleanCost(item);
-                MaterialUtility.ConsumeIngredientsOnBench(Bench, pawn.Map, cleanCost);
-
-                if (item is Apparel apparel)
-                {
-                    apparel.WornByCorpse = false;
-                    apparel.Notify_ColorChanged();
-                }
-
-                if (IsBillDriven)
-                    job.bill.Notify_IterationCompleted(pawn, new List<Thing> { item });
-
-                var des = pawn.Map.designationManager.DesignationOn(item, R4DefOf.R4_Clean);
-                if (des != null)
-                    pawn.Map.designationManager.RemoveDesignation(des);
-            };
-
-            yield return finishToil;
         }
     }
 }

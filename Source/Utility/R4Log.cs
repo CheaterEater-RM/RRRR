@@ -11,7 +11,7 @@ namespace RRRR
     {
         public static void Debug(string msg)
         {
-            if (RRRR_Mod.Settings?.debugLogging == true)
+            if (Prefs.DevMode || RRRR_Mod.Settings?.debugLogging == true)
                 Log.Message($"[R4] {msg}");
         }
 

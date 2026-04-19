@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -353,7 +354,120 @@ namespace RRRR
         }
 
         // ================================================================
-        // BENCH INGREDIENT CONSUMPTION
+        // PLACED-THING INGREDIENT CONSUMPTION
+        // ================================================================
+
+        /// <summary>
+        /// Consumes ingredients tracked by job.placedThings, matching expected
+        /// costs by ThingDef. This is the primary consumption method for R4 jobs
+        /// after the PlaceHauledThingInCell patch populates job.placedThings.
+        /// </summary>
+        public static void ConsumeFromPlacedThings(Job job, List<ThingDefCountClass> expectedCosts)
+        {
+            R4Log.Debug($"ConsumeFromPlacedThings: expected={DescribeCosts(expectedCosts)} tracked={DescribePlacedThings(job)}");
+
+            if (job.placedThings == null || job.placedThings.Count == 0)
+            {
+                R4Log.Warn("ConsumeFromPlacedThings: job.placedThings is null or empty. " +
+                            "Ingredients may not be consumed. Job: " + job.def.defName);
+                return;
+            }
+
+            // Build remaining-count table from expected costs
+            var remaining = new Dictionary<ThingDef, int>(expectedCosts.Count);
+            for (int i = 0; i < expectedCosts.Count; i++)
+            {
+                var entry = expectedCosts[i];
+                if (entry.thingDef == null || entry.count <= 0) continue;
+                if (remaining.TryGetValue(entry.thingDef, out int existing))
+                    remaining[entry.thingDef] = existing + entry.count;
+                else
+                    remaining[entry.thingDef] = entry.count;
+            }
+
+            // Consume from placed things, matching by ThingDef
+            for (int i = 0; i < job.placedThings.Count; i++)
+            {
+                ThingCountClass ptc = job.placedThings[i];
+                if (ptc.thing == null || ptc.Count <= 0) continue;
+                if (!remaining.TryGetValue(ptc.thing.def, out int need)) continue;
+
+                int toConsume = Mathf.Min(need, ptc.Count);
+                toConsume = Mathf.Min(toConsume, ptc.thing.stackCount);
+
+                need -= toConsume;
+                if (need <= 0)
+                    remaining.Remove(ptc.thing.def);
+                else
+                    remaining[ptc.thing.def] = need;
+
+                if (toConsume >= ptc.thing.stackCount)
+                    ptc.thing.Destroy();
+                else
+                    ptc.thing.stackCount -= toConsume;
+            }
+
+            // Clear placed things after consumption
+            job.placedThings = null;
+
+            if (remaining.Count > 0)
+            {
+                var missing = new List<string>(remaining.Count);
+                foreach (var kv in remaining)
+                    missing.Add($"{kv.Key.defName}x{kv.Value}");
+                R4Log.Warn("ConsumeFromPlacedThings: not all expected ingredients found. " +
+                            "Missing: " + string.Join(", ", missing));
+            }
+            else
+            {
+                R4Log.Debug("ConsumeFromPlacedThings: consumed all expected ingredients successfully.");
+            }
+        }
+
+        public static string DescribeCosts(List<ThingDefCountClass> costs)
+        {
+            if (costs == null || costs.Count == 0)
+                return "none";
+
+            var parts = new List<string>(costs.Count);
+            for (int i = 0; i < costs.Count; i++)
+            {
+                ThingDefCountClass entry = costs[i];
+                if (entry?.thingDef == null || entry.count <= 0)
+                    continue;
+
+                parts.Add($"{entry.thingDef.defName}x{entry.count}");
+            }
+
+            return parts.Count == 0 ? "none" : string.Join(", ", parts);
+        }
+
+        public static string DescribePlacedThings(Job job)
+        {
+            if (job?.placedThings == null || job.placedThings.Count == 0)
+                return "none";
+
+            var parts = new List<string>(job.placedThings.Count);
+            for (int i = 0; i < job.placedThings.Count; i++)
+            {
+                ThingCountClass entry = job.placedThings[i];
+                if (entry?.thing == null)
+                {
+                    parts.Add("<null>");
+                    continue;
+                }
+
+                string location = entry.thing.Spawned
+                    ? entry.thing.PositionHeld.ToString()
+                    : "unspawned";
+                parts.Add($"{entry.thing.def.defName} tracked={entry.Count} stack={entry.thing.stackCount} at={location}");
+            }
+
+            return string.Join("; ", parts);
+        }
+
+        // ================================================================
+        // BENCH INGREDIENT CONSUMPTION (LEGACY)
         // ================================================================
 
         /// <summary>
@@ -374,6 +488,7 @@ namespace RRRR
         /// </summary>
         private const int MaxIngredientSearchRadius = 6; // radial steps; well beyond any normal bench
 
+        [Obsolete("Use ConsumeFromPlacedThings instead. This spatial scan can consume wrong materials.")]
         public static void ConsumeIngredientsOnBench(
             Thing bench,
             Map map,

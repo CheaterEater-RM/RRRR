@@ -91,9 +91,14 @@ namespace RRRR
                         continue;
                     }
 
+                    // Clear stale ingredients before starting a new job
+                    Job haulOff = WorkGiverUtility.HaulStuffOffBillGiverJob(pawn, billGiver, null);
+                    if (haulOff != null) return haulOff;
+
                     Job job = JobMaker.MakeJob(R4DefOf.RRRR_Clean, workbench);
-                    job.count = 1;
-                    job.bill = bill;
+                    job.count    = 1;
+                    job.bill     = bill;
+                    job.haulMode = HaulMode.ToCellNonStorage;
                     job.targetQueueA = new List<LocalTargetInfo> { item };
                     job.targetQueueB = new List<LocalTargetInfo>();
                     job.countQueue = new List<int>();
