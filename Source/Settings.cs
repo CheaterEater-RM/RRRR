@@ -1,4 +1,5 @@
 using UnityEngine;
+using RimWorld;
 using Verse;
 
 namespace RRRR
@@ -91,6 +92,32 @@ namespace RRRR
             minorMendingThreshold   = 0.95f;
             cleanCostFraction       = 0.20f;
         }
+
+        public bool HasSameValuesAs(RRRR_Settings other)
+        {
+            if (other == null)
+                return false;
+
+            return debugLogging == other.debugLogging
+                && Mathf.Approximately(recycleGlobalMult, other.recycleGlobalMult)
+                && skipIntricateComponents == other.skipIntricateComponents
+                && Mathf.Approximately(repairHpPerCycle, other.repairHpPerCycle)
+                && Mathf.Approximately(minorMendingThreshold, other.minorMendingThreshold)
+                && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction);
+        }
+
+        public RRRR_Settings Snapshot()
+        {
+            return new RRRR_Settings
+            {
+                debugLogging = debugLogging,
+                recycleGlobalMult = recycleGlobalMult,
+                skipIntricateComponents = skipIntricateComponents,
+                repairHpPerCycle = repairHpPerCycle,
+                minorMendingThreshold = minorMendingThreshold,
+                cleanCostFraction = cleanCostFraction,
+            };
+        }
     }
 
     /// <summary>
@@ -100,15 +127,25 @@ namespace RRRR
     {
         public static RRRR_Settings Settings { get; private set; }
 
+        private RRRR_Settings _lastAppliedSettings;
+
         public RRRR_Mod(ModContentPack content) : base(content)
         {
             Settings = GetSettings<RRRR_Settings>();
+            _lastAppliedSettings = Settings.Snapshot();
         }
 
         public override string SettingsCategory() => "R⁴: Rimworld Reduce, Reuse, Recycle";
 
+        public override void WriteSettings()
+        {
+            base.WriteSettings();
+            ApplySettings(force: true);
+        }
+
         public override void DoSettingsWindowContents(Rect inRect)
         {
+            RRRR_Settings before = Settings.Snapshot();
             var listing = new Listing_Standard();
             listing.Begin(inRect);
 
@@ -171,6 +208,39 @@ namespace RRRR
                 Settings.ResetToDefaults();
 
             listing.End();
+
+            if (!Settings.HasSameValuesAs(before))
+                ApplySettings(force: false);
+        }
+
+        private void ApplySettings(bool force)
+        {
+            if (!force && Settings.HasSameValuesAs(_lastAppliedSettings))
+                return;
+
+            RefreshCurrentSelection();
+            _lastAppliedSettings = Settings.Snapshot();
+        }
+
+        private static void RefreshCurrentSelection()
+        {
+            if (Current.ProgramState != ProgramState.Playing || Find.Selector == null)
+                return;
+
+            if (Find.Selector.SelectedObjectsListForReading == null || Find.Selector.SelectedObjectsListForReading.Count == 0)
+                return;
+
+            var selectedObjects = new System.Collections.Generic.List<object>(Find.Selector.SelectedObjectsListForReading);
+            Find.Selector.ClearSelection();
+
+            for (int i = 0; i < selectedObjects.Count; i++)
+            {
+                object selectedObject = selectedObjects[i];
+                if (selectedObject is Thing thing && thing.Destroyed)
+                    continue;
+
+                Find.Selector.Select(selectedObject, playSound: false, forceDesignatorDeselect: false);
+            }
         }
     }
 }
