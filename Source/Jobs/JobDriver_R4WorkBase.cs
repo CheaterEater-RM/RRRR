@@ -144,85 +144,111 @@ namespace RRRR
             };
             yield return startToil;
 
-            // ── Phase 1: Gather ingredients ──
-
             Toil gotoBillGiver = Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
+            bool workItemFirst = true;
 
-            yield return Toils_Jump.JumpIf(gotoBillGiver,
-                () => job.GetTargetQueue(IngredientInd).NullOrEmpty());
-
-            foreach (Toil t in R4CollectIngredientsToils.CollectIngredientsToils(
-                IngredientInd, BenchInd, CellInd,
-                subtractNumTakenFromJobCount: false,
-                failIfStackCountLessThanJobCount: false))
+            IEnumerable<Toil> YieldIngredientToils(bool skipToWorkItemPhase)
             {
-                yield return t;
+                if (!skipToWorkItemPhase && job.GetTargetQueue(IngredientInd).NullOrEmpty())
+                    yield break;
+
+                if (skipToWorkItemPhase)
+                {
+                    yield return Toils_Jump.JumpIf(gotoBillGiver,
+                        () => job.GetTargetQueue(IngredientInd).NullOrEmpty());
+                }
+
+                foreach (Toil toil in R4CollectIngredientsToils.CollectIngredientsToils(
+                    IngredientInd, BenchInd, CellInd,
+                    subtractNumTakenFromJobCount: false,
+                    failIfStackCountLessThanJobCount: false))
+                {
+                    yield return toil;
+                }
             }
 
-            // ── Phase 2: Go to bench, haul work item ──
-
-            yield return gotoBillGiver;
-
-            Toil gotoItem = ToilMaker.MakeToil("R4_Work_GotoItem");
-            gotoItem.defaultCompleteMode = ToilCompleteMode.PatherArrival;
-            gotoItem.initAction = delegate
+            IEnumerable<Toil> YieldWorkItemToils()
             {
-                Thing item = WorkItem;
-                if (item == null || item.Destroyed)
-                {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
-                pawn.pather.StartPath(item, PathEndMode.ClosestTouch);
-            };
-            gotoItem.AddFailCondition(() =>
-            {
-                Thing item = WorkItem;
-                return item == null || item.Destroyed || item.IsForbidden(pawn);
-            });
-            yield return gotoItem;
+                yield return gotoBillGiver;
 
-            Toil carryItem = ToilMaker.MakeToil("R4_Work_CarryItem");
-            carryItem.defaultCompleteMode = ToilCompleteMode.Instant;
-            carryItem.initAction = delegate
-            {
-                Thing item = WorkItem;
-                if (item == null || item.Destroyed)
+                Toil gotoItem = ToilMaker.MakeToil("R4_Work_GotoItem");
+                gotoItem.defaultCompleteMode = ToilCompleteMode.PatherArrival;
+                gotoItem.initAction = delegate
                 {
-                    EndJobWith(JobCondition.Incompletable);
-                    return;
-                }
-                if (pawn.carryTracker.CarriedThing == null)
-                {
-                    int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
-                    if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
-                        EndJobWith(JobCondition.Incompletable);
-                }
-            };
-            yield return carryItem;
-
-            yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
-
-            Toil dropItem = ToilMaker.MakeToil("R4_Work_DropItem");
-            dropItem.defaultCompleteMode = ToilCompleteMode.Instant;
-            dropItem.initAction = delegate
-            {
-                if (pawn.carryTracker.CarriedThing != null)
-                {
-                    if (!R4WorkbenchPlacement.TryPlaceCarriedWorkItemAtBench(pawn, Bench, job, out Thing placedWorkItem, out string failReason))
+                    Thing item = WorkItem;
+                    if (item == null || item.Destroyed)
                     {
-                        R4Log.Warn(
-                            $"Work item placement failed for {job.def.defName}: pawn={pawn.LabelShort} jobId={job.loadID} " +
-                            $"reason={failReason ?? "unknown"} tracked={MaterialUtility.DescribePlacedThings(job)}");
                         EndJobWith(JobCondition.Incompletable);
+                        return;
                     }
-                    else
-                        R4Log.Debug(
-                            $"Work item placed for {job.def.defName}: {DescribeItemState(WorkItem)} " +
-                            $"placedAt={DescribeThing(placedWorkItem)} tracked={MaterialUtility.DescribePlacedThings(job)}");
-                }
-            };
-            yield return dropItem;
+                    pawn.pather.StartPath(item, PathEndMode.ClosestTouch);
+                };
+                gotoItem.AddFailCondition(() =>
+                {
+                    Thing item = WorkItem;
+                    return item == null || item.Destroyed || item.IsForbidden(pawn);
+                });
+                yield return gotoItem;
+
+                Toil carryItem = ToilMaker.MakeToil("R4_Work_CarryItem");
+                carryItem.defaultCompleteMode = ToilCompleteMode.Instant;
+                carryItem.initAction = delegate
+                {
+                    Thing item = WorkItem;
+                    if (item == null || item.Destroyed)
+                    {
+                        EndJobWith(JobCondition.Incompletable);
+                        return;
+                    }
+                    if (pawn.carryTracker.CarriedThing == null)
+                    {
+                        int count = Mathf.Min(item.stackCount, pawn.carryTracker.AvailableStackSpace(item.def));
+                        if (count <= 0 || pawn.carryTracker.TryStartCarry(item, count) <= 0)
+                            EndJobWith(JobCondition.Incompletable);
+                    }
+                };
+                yield return carryItem;
+
+                yield return Toils_Goto.GotoThing(BenchInd, PathEndMode.InteractionCell);
+
+                Toil dropItem = ToilMaker.MakeToil("R4_Work_DropItem");
+                dropItem.defaultCompleteMode = ToilCompleteMode.Instant;
+                dropItem.initAction = delegate
+                {
+                    if (pawn.carryTracker.CarriedThing != null)
+                    {
+                        if (!R4WorkbenchPlacement.TryPlaceCarriedWorkItemAtBench(pawn, Bench, job, out Thing placedWorkItem, out string failReason))
+                        {
+                            R4Log.Warn(
+                                $"Work item placement failed for {job.def.defName}: pawn={pawn.LabelShort} jobId={job.loadID} " +
+                                $"reason={failReason ?? "unknown"} tracked={MaterialUtility.DescribePlacedThings(job)}");
+                            EndJobWith(JobCondition.Incompletable);
+                        }
+                        else
+                            R4Log.Debug(
+                                $"Work item placed for {job.def.defName}: {DescribeItemState(WorkItem)} " +
+                                $"placedAt={DescribeThing(placedWorkItem)} tracked={MaterialUtility.DescribePlacedThings(job)}");
+                    }
+                };
+                yield return dropItem;
+            }
+
+            if (workItemFirst)
+            {
+                foreach (Toil toil in YieldWorkItemToils())
+                    yield return toil;
+
+                foreach (Toil toil in YieldIngredientToils(skipToWorkItemPhase: false))
+                    yield return toil;
+            }
+            else
+            {
+                foreach (Toil toil in YieldIngredientToils(skipToWorkItemPhase: true))
+                    yield return toil;
+
+                foreach (Toil toil in YieldWorkItemToils())
+                    yield return toil;
+            }
 
             // ── Phase 3: Work one cycle ──
 
