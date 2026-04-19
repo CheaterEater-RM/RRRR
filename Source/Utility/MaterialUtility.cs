@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using UnityEngine;
@@ -353,7 +354,254 @@ namespace RRRR
         }
 
         // ================================================================
-        // BENCH INGREDIENT CONSUMPTION
+        // PLACED-THING INGREDIENT CONSUMPTION
+        // ================================================================
+
+        /// <summary>
+        /// Mirrors vanilla Toils_Recipe.CalculateIngredients for placedThings:
+        /// extract this job's counted share into detached ingredient Things,
+        /// zero the tracked counts, and clear job.placedThings.
+        /// </summary>
+        public static List<Thing> ExtractPlacedIngredients(Job job)
+        {
+            var extractedIngredients = new List<Thing>();
+
+            if (job?.placedThings == null || job.placedThings.Count == 0)
+                return extractedIngredients;
+
+            for (int i = 0; i < job.placedThings.Count; i++)
+            {
+                ThingCountClass entry = job.placedThings[i];
+                if (entry == null)
+                {
+                    R4Log.Warn($"ExtractPlacedIngredients: null placed-things entry for {DescribeJob(job)}.");
+                    continue;
+                }
+
+                if (entry.Count <= 0)
+                {
+                    R4Log.Warn(
+                        $"ExtractPlacedIngredients: non-positive tracked count {entry.Count} for {DescribeJob(job)} " +
+                        $"thing={DescribeThingReference(entry.thing)}.");
+                    continue;
+                }
+
+                Thing thing = entry.thing;
+                if (thing == null)
+                {
+                    R4Log.Warn($"ExtractPlacedIngredients: null tracked thing for {DescribeJob(job)}.");
+                    continue;
+                }
+
+                if (thing.Destroyed || thing.stackCount <= 0)
+                {
+                    R4Log.Warn(
+                        $"ExtractPlacedIngredients: invalid tracked thing for {DescribeJob(job)} " +
+                        $"thing={DescribeThingReference(thing)} count={entry.Count}.");
+                    continue;
+                }
+
+                Thing extractedThing = entry.Count >= thing.stackCount
+                    ? thing
+                    : thing.SplitOff(entry.Count);
+
+                entry.Count = 0;
+
+                if (extractedIngredients.Contains(extractedThing))
+                {
+                    R4Log.Warn(
+                        $"ExtractPlacedIngredients: duplicate detached ingredient for {DescribeJob(job)} " +
+                        $"thing={DescribeThingReference(extractedThing)}.");
+                    continue;
+                }
+
+                extractedIngredients.Add(extractedThing);
+            }
+
+            job.placedThings = null;
+            return extractedIngredients;
+        }
+
+        public static void DestroyExtractedIngredients(List<Thing> ingredients)
+        {
+            if (ingredients == null || ingredients.Count == 0)
+                return;
+
+            for (int i = 0; i < ingredients.Count; i++)
+            {
+                Thing thing = ingredients[i];
+                if (thing == null || thing.Destroyed)
+                    continue;
+
+                thing.Destroy();
+            }
+        }
+
+        public static void LogPlacedIngredientMismatch(Job job, List<Thing> extractedIngredients, List<ThingDefCountClass> expectedCosts)
+        {
+            if (expectedCosts == null || expectedCosts.Count == 0)
+            {
+                if (extractedIngredients != null && extractedIngredients.Count > 0)
+                {
+                    R4Log.Debug(
+                        $"ExtractPlacedIngredients: cleared unexpected detached ingredients for {DescribeJob(job)} " +
+                        $"extracted={DescribeThingList(extractedIngredients)}.");
+                }
+
+                return;
+            }
+
+            Dictionary<ThingDef, int> expected = BuildExpectedCountMap(expectedCosts);
+            Dictionary<ThingDef, int> extracted = BuildThingCountMap(extractedIngredients);
+
+            if (!CountMapsEqual(expected, extracted))
+            {
+                R4Log.Warn(
+                    $"ExtractPlacedIngredients: extracted ingredients did not match expected costs for {DescribeJob(job)}. " +
+                    $"expected={DescribeCosts(expectedCosts)} extracted={DescribeThingList(extractedIngredients)}");
+            }
+            else
+            {
+                R4Log.Debug(
+                    $"ExtractPlacedIngredients: extracted all expected ingredients successfully for {DescribeJob(job)}. " +
+                    $"extracted={DescribeThingList(extractedIngredients)}");
+            }
+        }
+
+        public static string DescribeCosts(List<ThingDefCountClass> costs)
+        {
+            if (costs == null || costs.Count == 0)
+                return "none";
+
+            var parts = new List<string>(costs.Count);
+            for (int i = 0; i < costs.Count; i++)
+            {
+                ThingDefCountClass entry = costs[i];
+                if (entry?.thingDef == null || entry.count <= 0)
+                    continue;
+
+                parts.Add($"{entry.thingDef.defName}x{entry.count}");
+            }
+
+            return parts.Count == 0 ? "none" : string.Join(", ", parts);
+        }
+
+        public static string DescribeThingList(List<Thing> things)
+        {
+            if (things == null || things.Count == 0)
+                return "none";
+
+            Dictionary<ThingDef, int> counts = BuildThingCountMap(things);
+            if (counts.Count == 0)
+                return "none";
+
+            var parts = new List<string>(counts.Count);
+            foreach (KeyValuePair<ThingDef, int> entry in counts)
+                parts.Add($"{entry.Key.defName}x{entry.Value}");
+
+            return string.Join(", ", parts);
+        }
+
+        public static string DescribePlacedThings(Job job)
+        {
+            if (job?.placedThings == null || job.placedThings.Count == 0)
+                return "none";
+
+            var parts = new List<string>(job.placedThings.Count);
+            for (int i = 0; i < job.placedThings.Count; i++)
+            {
+                ThingCountClass entry = job.placedThings[i];
+                if (entry?.thing == null)
+                {
+                    parts.Add("<null>");
+                    continue;
+                }
+
+                string location = entry.thing.Spawned
+                    ? entry.thing.PositionHeld.ToString()
+                    : "unspawned";
+                parts.Add($"{entry.thing.def.defName}[{entry.thing.ThingID ?? entry.thing.GetUniqueLoadID()}] tracked={entry.Count} stack={entry.thing.stackCount} at={location}");
+            }
+
+            return string.Join("; ", parts);
+        }
+
+        private static Dictionary<ThingDef, int> BuildExpectedCountMap(List<ThingDefCountClass> expectedCosts)
+        {
+            var counts = new Dictionary<ThingDef, int>();
+            if (expectedCosts == null)
+                return counts;
+
+            for (int i = 0; i < expectedCosts.Count; i++)
+            {
+                ThingDefCountClass entry = expectedCosts[i];
+                if (entry?.thingDef == null || entry.count <= 0)
+                    continue;
+
+                if (counts.TryGetValue(entry.thingDef, out int existing))
+                    counts[entry.thingDef] = existing + entry.count;
+                else
+                    counts[entry.thingDef] = entry.count;
+            }
+
+            return counts;
+        }
+
+        private static Dictionary<ThingDef, int> BuildThingCountMap(List<Thing> things)
+        {
+            var counts = new Dictionary<ThingDef, int>();
+            if (things == null)
+                return counts;
+
+            for (int i = 0; i < things.Count; i++)
+            {
+                Thing thing = things[i];
+                if (thing?.def == null || thing.stackCount <= 0)
+                    continue;
+
+                if (counts.TryGetValue(thing.def, out int existing))
+                    counts[thing.def] = existing + thing.stackCount;
+                else
+                    counts[thing.def] = thing.stackCount;
+            }
+
+            return counts;
+        }
+
+        private static bool CountMapsEqual(Dictionary<ThingDef, int> expected, Dictionary<ThingDef, int> actual)
+        {
+            if (expected.Count != actual.Count)
+                return false;
+
+            foreach (KeyValuePair<ThingDef, int> entry in expected)
+            {
+                if (!actual.TryGetValue(entry.Key, out int actualCount) || actualCount != entry.Value)
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static string DescribeJob(Job job)
+        {
+            if (job == null)
+                return "null job";
+
+            return $"{job.def?.defName ?? "null"}#{job.loadID}";
+        }
+
+        public static string DescribeThingReference(Thing thing)
+        {
+            if (thing == null)
+                return "null";
+
+            string location = thing.Spawned ? thing.PositionHeld.ToString() : "unspawned";
+            string uniqueId = thing.ThingID ?? thing.GetUniqueLoadID();
+            return $"{thing.def.defName}[{uniqueId}] stack={thing.stackCount} at={location}";
+        }
+
+        // ================================================================
+        // BENCH INGREDIENT CONSUMPTION (LEGACY)
         // ================================================================
 
         /// <summary>
@@ -374,6 +622,7 @@ namespace RRRR
         /// </summary>
         private const int MaxIngredientSearchRadius = 6; // radial steps; well beyond any normal bench
 
+        [Obsolete("Use ExtractPlacedIngredients and DestroyExtractedIngredients instead. This spatial scan can consume wrong materials.")]
         public static void ConsumeIngredientsOnBench(
             Thing bench,
             Map map,

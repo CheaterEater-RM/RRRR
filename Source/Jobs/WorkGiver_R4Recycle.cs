@@ -14,7 +14,11 @@ namespace RRRR
 
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
+            DesignationManager designationManager = pawn.Map.designationManager;
+            if (designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
+                return false;
+            if (designationManager.DesignationOn(t, R4DefOf.R4_Repair) != null ||
+                designationManager.DesignationOn(t, R4DefOf.R4_Clean) != null)
                 return false;
             if (t.IsForbidden(pawn) || !pawn.CanReserve(t, 1, -1, null, forced))
                 return false;
@@ -26,7 +30,11 @@ namespace RRRR
 
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
+            DesignationManager designationManager = pawn.Map.designationManager;
+            if (designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
+                return null;
+            if (designationManager.DesignationOn(t, R4DefOf.R4_Repair) != null ||
+                designationManager.DesignationOn(t, R4DefOf.R4_Clean) != null)
                 return null;
 
             Thing bench = FindBench(pawn, t, forced);

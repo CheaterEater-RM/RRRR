@@ -24,6 +24,12 @@ namespace RRRR
         // Matches vanilla WorkGiver_DoBill.ReCheckFailedBillTicksRange
         private static readonly IntRange ReCheckFailedBillTicksRange = new IntRange(500, 600);
 
+        private int _cachedTick = -1;
+        private Pawn _cachedPawn;
+        private Thing _cachedWorkbench;
+        private bool _cachedForced;
+        private Job _cachedJob;
+
         private static bool IsRepairRecipe(RecipeDef recipe) =>
             recipe.workerClass == typeof(RecipeWorker_R4Repair);
 
@@ -41,10 +47,34 @@ namespace RRRR
 
         public override bool HasJobOnThing(Pawn pawn, Thing thing, bool forced = false)
         {
-            return JobOnThing(pawn, thing, forced) != null;
+            return GetOrCreateCachedJob(pawn, thing, forced) != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing workbench, bool forced = false)
+        {
+            return GetOrCreateCachedJob(pawn, workbench, forced);
+        }
+
+        private Job GetOrCreateCachedJob(Pawn pawn, Thing workbench, bool forced)
+        {
+            int currentTick = Find.TickManager.TicksGame;
+            if (_cachedTick == currentTick && _cachedPawn == pawn && _cachedWorkbench == workbench && _cachedForced == forced)
+            {
+                R4Log.Debug(
+                    $"Repair bill cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob={_cachedJob != null}");
+                return _cachedJob;
+            }
+
+            Job job = CreateJobOnThing(pawn, workbench, forced);
+            _cachedTick = currentTick;
+            _cachedPawn = pawn;
+            _cachedWorkbench = workbench;
+            _cachedForced = forced;
+            _cachedJob = job;
+            return job;
+        }
+
+        private Job CreateJobOnThing(Pawn pawn, Thing workbench, bool forced)
         {
             if (!(workbench is IBillGiver billGiver))
                 return null;
@@ -52,11 +82,14 @@ namespace RRRR
                 return null;
             if (!billGiver.CurrentlyUsableForBills())
                 return null;
+            billGiver.BillStack.RemoveIncompletableBills();
             if (!billGiver.BillStack.AnyShouldDoNow)
                 return null;
             if (workbench.IsBurning() || workbench.IsForbidden(pawn))
                 return null;
             if (!pawn.CanReserve(workbench, 1, -1, null, forced))
+                return null;
+            if (workbench.def.hasInteractionCell && !pawn.CanReserveSittableOrSpot(workbench.InteractionCell, workbench, forced))
                 return null;
 
             foreach (Bill bill in billGiver.BillStack)
@@ -76,29 +109,62 @@ namespace RRRR
                     continue;
 
                 var candidates = FindCandidateItems(pawn, workbench, bill, forced);
+                R4Log.Debug(
+                    $"Repair bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
 
                 for (int c = 0; c < candidates.Count; c++)
                 {
                     Thing item = candidates[c];
 
-                    Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
-                    job.count        = 1;
-                    job.bill         = bill;
-                    job.targetQueueA = new List<LocalTargetInfo> { item };
-                    job.targetQueueB = new List<LocalTargetInfo>();
-                    job.countQueue   = new List<int>();
-
                     // Minor mending: free, no materials needed
                     if (WorkGiver_R4Repair.IsMinorMending(item))
+                    {
+                        Job haulOff = WorkGiverUtility.HaulStuffOffBillGiverJob(pawn, billGiver, null);
+                        if (haulOff != null) return haulOff;
+
+                        Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
+                        job.count        = 1;
+                        job.bill         = bill;
+                        job.haulMode     = HaulMode.ToCellNonStorage;
+                        job.placedThings = null;
+                        job.targetQueueA = new List<LocalTargetInfo> { item };
+                        job.targetQueueB = new List<LocalTargetInfo>();
+                        job.countQueue   = new List<int>();
                         return job;
+                    }
 
                     var cycleCost = MaterialUtility.GetRepairCycleCost(item);
                     if (cycleCost.Count == 0)
-                        return job; // costless item
+                    {
+                        Job haulOff = WorkGiverUtility.HaulStuffOffBillGiverJob(pawn, billGiver, null);
+                        if (haulOff != null) return haulOff;
+
+                        Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
+                        job.count        = 1;
+                        job.bill         = bill;
+                        job.haulMode     = HaulMode.ToCellNonStorage;
+                        job.placedThings = null;
+                        job.targetQueueA = new List<LocalTargetInfo> { item };
+                        job.targetQueueB = new List<LocalTargetInfo>();
+                        job.countQueue   = new List<int>();
+                        return job;
+                    }
 
                     if (MaterialUtility.TryFindIngredients(cycleCost, pawn, workbench.Position,
                             bill.ingredientSearchRadius, out var foundThings, out var foundCounts))
                     {
+                        Job haulOff = WorkGiverUtility.HaulStuffOffBillGiverJob(pawn, billGiver, null);
+                        if (haulOff != null) return haulOff;
+
+                        Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
+                        job.count        = 1;
+                        job.bill         = bill;
+                        job.haulMode     = HaulMode.ToCellNonStorage;
+                        job.placedThings = null;
+                        job.targetQueueA = new List<LocalTargetInfo> { item };
+                        job.targetQueueB = new List<LocalTargetInfo>();
+                        job.countQueue   = new List<int>();
+
                         for (int i = 0; i < foundThings.Count; i++)
                         {
                             job.targetQueueB.Add(foundThings[i]);

@@ -26,11 +26,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `WorkGiver_R4Recycle` | Designation-based: scans for designated items, creates recycle jobs (per work type) |
 | `WorkGiver_R4Repair` | Designation-based: scans for items needing repair, creates repair jobs |
 | `WorkGiver_R4Clean` | Designation-based: scans for tainted apparel, creates clean jobs |
-| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling |
+| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling; clears stale bench ingredients, removes incompletable bills, memoizes same-tick scans, and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `WorkGiver_R4CleanBill` | Bill-based: custom WorkGiver for clean bills with material hauling; clears stale bench ingredients, removes incompletable bills, memoizes same-tick scans, and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `JobDriver_R4WorkBase` | Shared base class for Repair and Clean job drivers; centralizes work toil timing, fail conditions, and ingredient handling |
 | `RecipeWorker_R4Recycle` | Bill-based: defers item destruction, skill-based product calculation |
 | `RecipeWorker_R4Repair` | Bill-based: prevents bill ingredient destruction; actual repair logic runs in `JobDriver_R4Repair` |
 | `RecipeWorker_R4Clean` | Bill-based: removes taint, leaves item on bench |
-| `JobDriver_R4Recycle` | Designation flow: haul item onto bench stack cells → work → spawn materials → destroy item |
+| `JobDriver_R4Recycle` | Designation flow: haul item onto bench stack cells → delta-scaled work with interaction-cell reservation and bench `UsedThisTick` parity → spawn materials → destroy item |
 | `JobDriver_R4Repair` | Designation flow: gather ingredients → haul item onto bench stack cells → work → apply repair cycle |
 | `JobDriver_R4Clean` | Designation flow: gather ingredients → haul item onto bench stack cells → work → remove taint |
 | `WorkGiver_R4DesignationBase` | Abstract base for all designation WorkGivers, handles bench routing by work type |
@@ -42,12 +44,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `Designator_RepairThing` | Orders menu designator for drag-select repair |
 | `Designator_CleanThing` | Orders menu designator for drag-select taint cleaning |
 
-### Harmony Patches (3 total)
+### Harmony Patches (4 total)
 
 | Target | Type | Purpose |
 |---|---|---|
 | `Thing.GetGizmos` | Postfix | Inject per-item R4 gizmo buttons (recycle, repair, clean) with rich tooltips |
 | `Building_WorkTable.SpawnSetup` | Postfix | Strip stale bills (e.g. vanilla SmeltWeapon) on load/placement for save compat |
+| `Toils_Haul.PlaceHauledThingInCell` | Postfix | Track placed ingredient stacks for R4 repair/clean jobs via `job.placedThings` and enable correct ingredient consumption |
 | `WorkGiver_DoBill.JobOnThing` | Postfix | Null out R4 repair and clean jobs so vanilla bill search cannot run in parallel with the custom R4 bill WorkGivers |
 
 ### Designation Flow
@@ -62,13 +65,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 **Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle uses vanilla's `WorkGiver_DoBill` pipeline. Repair and Clean use custom `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` because the worked item and dynamic material costs need to be handled together. A Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out R4 repair and clean jobs so vanilla bill search does not race the custom bill paths.
 
-**Bench staging:** R4's custom job drivers place the worked item onto the bench's `IngredientStackCells`, matching vanilla worktable staging more closely than dropping the item near the pawn.
+**Bench staging:** Ingredient hauling for R4 repair/clean uses the bench's `IngredientStackCells`, but the worked item itself must stage to a separate nearby cell that does not reuse tracked ingredient stacks. Reusing `IngredientStackCells` for the worked item can invalidate `job.placedThings` before the work toil starts.
 
 ### WorkGiver Architecture
 
 Each designation action (recycle, repair, clean) is registered under **three WorkGiverDefs** — Crafting, Smithing, Tailoring — so the work tab column matches the bench type. The shared `WorkGiver_R4DesignationBase.FindBench` filters candidates to benches whose WorkTypeDef matches the WorkGiver's own `def.workType`.
 
-Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path.
+Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path. Repair and Clean bill WorkGivers also clear stale bill-giver ingredients before creating a new job, call `BillStack.RemoveIncompletableBills()` to match vanilla bill hygiene, memoize same-tick scanner results to avoid duplicate full searches across `HasJobOnThing` and `JobOnThing`, and set `job.haulMode = HaulMode.ToCellNonStorage` so the bench target remains stable throughout the custom bill pipeline.
 
 ### Workbench Routing
 
@@ -93,7 +96,7 @@ The original design used `CompRecyclable` for tracking designations and gizmos. 
 
 `VanillaSmelting.xml` removes `SmeltWeapon`, `SmeltApparel`, and `SmeltOrDestroyThing` from the electric smelter. R4's per-bench recycle bills replace these with skill-based recycling. `DestroyWeapon`/`DestroyApparel` and `ExtractMetalFromSlag` are kept intact.
 
-`Patch_BuildingWorkTable_SpawnSetup` (Harmony postfix) strips stale bills from saved workbenches whose recipe is no longer in the bench's `AllRecipes` list, ensuring clean save transitions.
+`Patch_BuildingWorkTable_SpawnSetup` (Harmony postfix) strips stale bills from saved workbenches whose recipe is no longer in the bench's `AllRecipes` list, ensuring clean save transitions without unconditional release-log spam.
 
 ### Orders Menu
 
@@ -184,6 +187,7 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 - Clean bills: custom `WorkGiver_R4CleanBill` → custom `JobDriver_R4Clean` (uses `JobDriver_DoBill.CollectIngredientsToils`)
 - Vanilla `WorkGiver_DoBill` is allowed to search normally but any resulting R4 repair or clean job is nulled out by Harmony so only the custom bill paths execute
 - `RecipeWorker.ConsumeIngredient` overridden to prevent item destruction
+- `JobDriver_R4Repair` and `JobDriver_R4Clean` now inherit from `JobDriver_R4WorkBase`, aligning their work loop with vanilla `JobDriver_DoBill` and centralizing `tickAction`/`tickIntervalAction` semantics
 - `RecipeWorker.Notify_IterationCompleted` handles recycle/clean completion logic; repair completion is handled in `JobDriver_R4Repair`
 
 ## Settings
@@ -226,8 +230,29 @@ RRRR\
     ├── Defs\                 ← R4DefOf
     ├── Designators\          ← Designator_RecycleThing, Designator_RepairThing, Designator_CleanThing
     ├── Filters\              ← SpecialThingFilterWorker_Damaged, SpecialThingFilterWorker_Tainted
-    ├── Jobs\                 ← JobDrivers (Recycle, Repair, Clean), WorkGivers (designation + bill)
-    ├── Patches\              ← Harmony patches (Thing.GetGizmos, Building_WorkTable.SpawnSetup)
+    ├── Jobs\                 ← JobDrivers (Recycle, Repair, Clean, shared Repair/Clean base), WorkGivers (designation + bill)
+    ├── Patches\              ← Harmony patches (Thing.GetGizmos, Building_WorkTable.SpawnSetup, PlaceHauledThingInCell)
     ├── RecipeWorkers\        ← RecipeWorker_R4Recycle, RecipeWorker_R4Repair, RecipeWorker_R4Clean
     └── Utility\              ← MaterialUtility, WorkbenchRouter, SkillUtility
 ```
+
+  ## In Progress
+
+  ### Repair/Clean Staging Invariant
+
+  Repair and clean jobs must not use the same staging contract for both the worked item and the consumed ingredients. The stable pattern across comparable mods is that either the item itself is the bill/job target and ingredients are separate, or the job operates directly on the item without separate bench staging. R4's current failure mode comes from mixing both models: ingredients are tracked through `job.placedThings` on bench staging cells, then the worked item is also dropped onto that same staging surface. That lets the worked-item drop invalidate tracked ingredient references before the work toil starts.
+
+  Any follow-up implementation should preserve one clear ownership model:
+
+  - ingredient stacks may be staged and tracked on bench cells, with the worked item kept on a separate nearby cell, or
+  - the worked item remains the primary job target and is not independently re-staged onto ingredient cells at all.
+
+  What must not happen is a second placement step that can merge with, replace, or despawn tracked ingredient stacks belonging to the same job.
+
+  For R4 specifically, the preferred long-term model is:
+
+  - the work item remains the authoritative job object throughout the repair/clean cycle
+  - ingredients alone use the placed-things tracking contract
+  - the work item may still be shown at the bench for player feedback, but only in a dedicated display cell that is excluded from ingredient staging for that job
+
+  This display cell should be derived from the bench at runtime rather than stored as new persistent state. On benches with multiple occupied cells, one deterministic bench cell can be reserved as the display surface and removed from ingredient placement candidates. On 1x1 benches, where no separate occupied cell exists or the occupied cell is not spawnable, the display position must fall back to a deterministic adjacent cell near the interaction point. The user-facing requirement is "visibly at the bench," not "always on an occupied bench tile," because the latter is not physically valid for every vanilla bench shape.

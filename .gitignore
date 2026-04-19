@@ -40,3 +40,7 @@ build_err.log
 build_restore.log
 build_restore_err.log
 *.binlog
+
+.github/
+CLAUDE.md
+Mending Examples/
