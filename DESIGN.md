@@ -26,13 +26,13 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `WorkGiver_R4Recycle` | Designation-based: scans for designated items, creates recycle jobs (per work type) |
 | `WorkGiver_R4Repair` | Designation-based: scans for items needing repair, creates repair jobs |
 | `WorkGiver_R4Clean` | Designation-based: scans for tainted apparel, creates clean jobs |
-| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling; clears stale bench ingredients and preserves the bench target with `haulMode = ToCellNonStorage` |
-| `WorkGiver_R4CleanBill` | Bill-based: custom WorkGiver for clean bills with material hauling; clears stale bench ingredients and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling; clears stale bench ingredients, removes incompletable bills, memoizes same-tick scans, and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `WorkGiver_R4CleanBill` | Bill-based: custom WorkGiver for clean bills with material hauling; clears stale bench ingredients, removes incompletable bills, memoizes same-tick scans, and preserves the bench target with `haulMode = ToCellNonStorage` |
 | `JobDriver_R4WorkBase` | Shared base class for Repair and Clean job drivers; centralizes work toil timing, fail conditions, and ingredient handling |
 | `RecipeWorker_R4Recycle` | Bill-based: defers item destruction, skill-based product calculation |
 | `RecipeWorker_R4Repair` | Bill-based: prevents bill ingredient destruction; actual repair logic runs in `JobDriver_R4Repair` |
 | `RecipeWorker_R4Clean` | Bill-based: removes taint, leaves item on bench |
-| `JobDriver_R4Recycle` | Designation flow: haul item onto bench stack cells → work → spawn materials → destroy item |
+| `JobDriver_R4Recycle` | Designation flow: haul item onto bench stack cells → delta-scaled work with interaction-cell reservation and bench `UsedThisTick` parity → spawn materials → destroy item |
 | `JobDriver_R4Repair` | Designation flow: gather ingredients → haul item onto bench stack cells → work → apply repair cycle |
 | `JobDriver_R4Clean` | Designation flow: gather ingredients → haul item onto bench stack cells → work → remove taint |
 | `WorkGiver_R4DesignationBase` | Abstract base for all designation WorkGivers, handles bench routing by work type |
@@ -71,7 +71,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 Each designation action (recycle, repair, clean) is registered under **three WorkGiverDefs** — Crafting, Smithing, Tailoring — so the work tab column matches the bench type. The shared `WorkGiver_R4DesignationBase.FindBench` filters candidates to benches whose WorkTypeDef matches the WorkGiver's own `def.workType`.
 
-Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path. Repair and Clean bill WorkGivers also clear stale bill-giver ingredients before creating a new job and set `job.haulMode = HaulMode.ToCellNonStorage` so the bench target remains stable throughout the custom bill pipeline.
+Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path. Repair and Clean bill WorkGivers also clear stale bill-giver ingredients before creating a new job, call `BillStack.RemoveIncompletableBills()` to match vanilla bill hygiene, memoize same-tick scanner results to avoid duplicate full searches across `HasJobOnThing` and `JobOnThing`, and set `job.haulMode = HaulMode.ToCellNonStorage` so the bench target remains stable throughout the custom bill pipeline.
 
 ### Workbench Routing
 
@@ -96,7 +96,7 @@ The original design used `CompRecyclable` for tracking designations and gizmos. 
 
 `VanillaSmelting.xml` removes `SmeltWeapon`, `SmeltApparel`, and `SmeltOrDestroyThing` from the electric smelter. R4's per-bench recycle bills replace these with skill-based recycling. `DestroyWeapon`/`DestroyApparel` and `ExtractMetalFromSlag` are kept intact.
 
-`Patch_BuildingWorkTable_SpawnSetup` (Harmony postfix) strips stale bills from saved workbenches whose recipe is no longer in the bench's `AllRecipes` list, ensuring clean save transitions.
+`Patch_BuildingWorkTable_SpawnSetup` (Harmony postfix) strips stale bills from saved workbenches whose recipe is no longer in the bench's `AllRecipes` list, ensuring clean save transitions without unconditional release-log spam.
 
 ### Orders Menu
 

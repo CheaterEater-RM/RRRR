@@ -24,6 +24,12 @@ namespace RRRR
         // Matches vanilla WorkGiver_DoBill.ReCheckFailedBillTicksRange
         private static readonly IntRange ReCheckFailedBillTicksRange = new IntRange(500, 600);
 
+        private int _cachedTick = -1;
+        private Pawn _cachedPawn;
+        private Thing _cachedWorkbench;
+        private bool _cachedForced;
+        private Job _cachedJob;
+
         private static bool IsRepairRecipe(RecipeDef recipe) =>
             recipe.workerClass == typeof(RecipeWorker_R4Repair);
 
@@ -41,10 +47,34 @@ namespace RRRR
 
         public override bool HasJobOnThing(Pawn pawn, Thing thing, bool forced = false)
         {
-            return JobOnThing(pawn, thing, forced) != null;
+            return GetOrCreateCachedJob(pawn, thing, forced) != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing workbench, bool forced = false)
+        {
+            return GetOrCreateCachedJob(pawn, workbench, forced);
+        }
+
+        private Job GetOrCreateCachedJob(Pawn pawn, Thing workbench, bool forced)
+        {
+            int currentTick = Find.TickManager.TicksGame;
+            if (_cachedTick == currentTick && _cachedPawn == pawn && _cachedWorkbench == workbench && _cachedForced == forced)
+            {
+                R4Log.Debug(
+                    $"Repair bill cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob={_cachedJob != null}");
+                return _cachedJob;
+            }
+
+            Job job = CreateJobOnThing(pawn, workbench, forced);
+            _cachedTick = currentTick;
+            _cachedPawn = pawn;
+            _cachedWorkbench = workbench;
+            _cachedForced = forced;
+            _cachedJob = job;
+            return job;
+        }
+
+        private Job CreateJobOnThing(Pawn pawn, Thing workbench, bool forced)
         {
             if (!(workbench is IBillGiver billGiver))
                 return null;
@@ -52,6 +82,7 @@ namespace RRRR
                 return null;
             if (!billGiver.CurrentlyUsableForBills())
                 return null;
+            billGiver.BillStack.RemoveIncompletableBills();
             if (!billGiver.BillStack.AnyShouldDoNow)
                 return null;
             if (workbench.IsBurning() || workbench.IsForbidden(pawn))
@@ -78,6 +109,8 @@ namespace RRRR
                     continue;
 
                 var candidates = FindCandidateItems(pawn, workbench, bill, forced);
+                R4Log.Debug(
+                    $"Repair bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
 
                 for (int c = 0; c < candidates.Count; c++)
                 {

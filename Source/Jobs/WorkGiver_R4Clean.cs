@@ -13,16 +13,49 @@ namespace RRRR
     /// </summary>
     public class WorkGiver_R4Clean : WorkGiver_R4DesignationBase
     {
+        private int _cachedTick = -1;
+        private Pawn _cachedPawn;
+        private Thing _cachedTarget;
+        private bool _cachedForced;
+        private Job _cachedJob;
+
         protected override DesignationDef DesignationDef => R4DefOf.R4_Clean;
 
         public override bool HasJobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            return JobOnThing(pawn, t, forced) != null;
+            return GetOrCreateCachedJob(pawn, t, forced) != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing t, bool forced = false)
         {
-            if (pawn.Map.designationManager.DesignationOn(t, R4DefOf.R4_Clean) == null)
+            return GetOrCreateCachedJob(pawn, t, forced);
+        }
+
+        private Job GetOrCreateCachedJob(Pawn pawn, Thing target, bool forced)
+        {
+            int currentTick = Find.TickManager.TicksGame;
+            if (_cachedTick == currentTick && _cachedPawn == pawn && _cachedTarget == target && _cachedForced == forced)
+            {
+                R4Log.Debug(
+                    $"Clean designation cache hit: pawn={pawn.LabelShort} target={target?.ThingID ?? target?.GetUniqueLoadID() ?? "null"} tick={currentTick} hasJob={_cachedJob != null}");
+                return _cachedJob;
+            }
+
+            Job job = CreateJobOnThing(pawn, target, forced);
+            _cachedTick = currentTick;
+            _cachedPawn = pawn;
+            _cachedTarget = target;
+            _cachedForced = forced;
+            _cachedJob = job;
+            return job;
+        }
+
+        private Job CreateJobOnThing(Pawn pawn, Thing t, bool forced)
+        {
+            DesignationManager designationManager = pawn.Map.designationManager;
+            if (designationManager.DesignationOn(t, R4DefOf.R4_Clean) == null)
+                return null;
+            if (designationManager.DesignationOn(t, R4DefOf.R4_Recycle) != null)
                 return null;
             if (t.IsForbidden(pawn) || !pawn.CanReserve(t, 1, -1, null, forced))
                 return null;
@@ -62,6 +95,9 @@ namespace RRRR
                     job.countQueue.Add(foundCounts[i]);
                 }
             }
+
+            R4Log.Debug(
+                $"Clean designation scan: pawn={pawn.LabelShort} item={t.ThingID ?? t.GetUniqueLoadID()} bench={bench.def.defName} queuedIngredients={job.targetQueueB.Count}");
 
             return job;
         }

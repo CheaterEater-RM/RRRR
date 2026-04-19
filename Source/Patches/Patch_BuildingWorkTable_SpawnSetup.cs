@@ -46,7 +46,7 @@ namespace RRRR
                     continue;
                 if (!allowed.Contains(bill.recipe))
                 {
-                    Log.Message($"[R4] Removing stale bill '{bill.recipe.defName}' " +
+                    R4Log.Debug($"Removing stale bill '{bill.recipe.defName}' " +
                                 $"from {__instance.def.defName} (recipe no longer available on this bench).");
                     stack.Delete(bill);
                 }
