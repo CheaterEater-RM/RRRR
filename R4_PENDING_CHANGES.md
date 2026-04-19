@@ -60,13 +60,15 @@ Also add `bench.Spawned` check in case the bench is destroyed mid-job after `Fai
 
 ---
 
-## 5. `tickAction` → `tickIntervalAction`
+## 5. Work progression timing
 
-**Why:** `tickAction` fires every game tick. At 3× speed, ticks fire 3× as fast, so work progresses 3× faster in wall-clock time than intended. `tickIntervalAction(int delta)` receives a `delta` proportional to elapsed ticks, giving consistent real-time work speed at all game speeds. This is a real gameplay bug — repair is much faster at 3× speed.
+**Status:** Implemented centrally in `JobDriver_R4WorkBase`.
 
-**How:** Replace the `tickAction = delegate { ... }` body with `tickIntervalAction = delegate(int delta) { ... }`. Multiply all per-tick increments (work decrement, skill XP gain) by `delta`.
+**Current rule:** `workToil.tickAction` is only for per-tick concerns (null check, `EndJobWith`, facing, `IBillGiverWithTickAction.UsedThisTick()`). `workToil.tickIntervalAction(int delta)` is responsible for advancing work, XP, and other delta-scaled progress.
 
-**Applies to:** `JobDriver_R4Repair` (work toil) and `JobDriver_R4Clean` (work toil).
+**Do not regress:** Never call `AdvanceWork` from both delegates. Work progression must live only in `tickIntervalAction`, with every progress/XP change multiplied by `delta`.
+
+**Applies to:** Shared repair/clean flow in `JobDriver_R4WorkBase`.
 
 ---
 

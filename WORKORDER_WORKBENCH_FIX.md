@@ -108,6 +108,12 @@ gotoItem.AddFailCondition(() => {
 
 This is the critical timing fix. The work toil must have two delegates:
 
+```csharp
+workToil.defaultCompleteMode = ToilCompleteMode.Never;
+```
+
+Completion is driven by `cycleWorkLeft` and `ReadyForNextToil()`, not by delay expiry. Keep `workToil.defaultCompleteMode` as `ToilCompleteMode.Never`. `tickIntervalAction` is driven by `DriverTickInterval(delta)`, so all work/XP changes must scale by `delta`. If you need a different cadence, set `workToil.defaultDuration` explicitly and keep the same `delta` scaling in `tickIntervalAction`.
+
 **`tickAction`** (fires every tick, regardless of game speed):
 ```csharp
 workToil.tickAction = delegate
@@ -232,7 +238,7 @@ public static class Patch_PlaceHauledThingInCell
     private static Thing FindPlacedThing(Map map, IntVec3 cell, ThingDef def)
     {
         List<Thing> things = map.thingGrid.ThingsListAt(cell);
-        for (int i = 0; i < things.Count; i++)
+        for (int i = things.Count - 1; i >= 0; i--)
         {
             if (things[i].def == def && things[i].def.category == ThingCategory.Item)
                 return things[i];
@@ -318,14 +324,15 @@ public static void ConsumeFromPlacedThings(Job job, List<ThingDefCountClass> exp
         ptc.Count -= toConsume;
     }
 
-    // Clear placedThings
-    job.placedThings = null;
-
     if (remaining.Count > 0)
     {
         Log.Warning("[RRRR] ConsumeFromPlacedThings: not all expected ingredients were found. " +
                     "Missing: " + string.Join(", ",
                         remaining.Select(kv => $"{kv.Key.defName}x{kv.Value}")));
+    }
+    else
+    {
+        job.placedThings = null;
     }
 }
 ```

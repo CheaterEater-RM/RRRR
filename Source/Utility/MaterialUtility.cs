@@ -622,7 +622,7 @@ namespace RRRR
         /// </summary>
         private const int MaxIngredientSearchRadius = 6; // radial steps; well beyond any normal bench
 
-        [Obsolete("Use ConsumeFromPlacedThings instead. This spatial scan can consume wrong materials.")]
+        [Obsolete("Use ExtractPlacedIngredients and DestroyExtractedIngredients instead. This spatial scan can consume wrong materials.")]
         public static void ConsumeIngredientsOnBench(
             Thing bench,
             Map map,

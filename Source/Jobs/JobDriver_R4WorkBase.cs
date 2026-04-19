@@ -306,11 +306,9 @@ namespace RRRR
                 pawn.rotationTracker.FaceTarget(Bench);
                 if (Bench is IBillGiverWithTickAction tickBench)
                     tickBench.UsedThisTick();
-
-                AdvanceWork(item, 1);
             };
 
-            // Fires at game-speed-adjusted intervals — work progress, XP, override checks
+            // Fires at game-speed-adjusted intervals — work progress, XP, comfort
             workToil.tickIntervalAction = delegate(int delta)
             {
                 Thing item = WorkItem;
@@ -436,10 +434,13 @@ namespace RRRR
 
         protected void RemoveDesignation(Thing item)
         {
-            if (item == null || item.Map == null) return;
-            var des = pawn.Map.designationManager.DesignationOn(item, WorkDesignationDef);
+            if (item == null || item.Map == null)
+                return;
+
+            DesignationManager designationManager = item.Map.designationManager;
+            var des = designationManager.DesignationOn(item, WorkDesignationDef);
             if (des != null)
-                pawn.Map.designationManager.RemoveDesignation(des);
+                designationManager.RemoveDesignation(des);
         }
 
         private string DescribeQueuedIngredients()

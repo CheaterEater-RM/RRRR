@@ -90,20 +90,30 @@ namespace RRRR
                                  actor.Faction,
                                  out foundCell)))
                         {
-                            if (actor.CanReserve(foundCell))
-                                actor.Reserve(foundCell, actor.CurJob);
+                            if (!actor.CanReserve(foundCell) || !actor.Reserve(foundCell, actor.CurJob))
+                            {
+                                AbortRedirectedHaul(actor, curJob,
+                                    $"could not reserve redirected haul target {foundCell} for {DescribeThingReference(actor.carryTracker.CarriedThing)}");
+                                return;
+                            }
 
                             actor.CurJob.SetTarget(cellInd, foundCell);
                             actor.jobs.curDriver.JumpToToil(nextToilOnPlaceFailOrIncomplete);
                         }
                         else if (HaulAIUtility.CanHaulAside(actor, actor.carryTracker.CarriedThing, out storeCell))
                         {
+                            if (nextToilOnPlaceFailOrIncomplete == null)
+                            {
+                                AbortRedirectedHaul(actor, curJob,
+                                    $"HaulAIUtility.CanHaulAside found fallback cell {storeCell} but no follow-up toil was provided for {DescribeThingReference(actor.carryTracker.CarriedThing)}");
+                                return;
+                            }
+
                             curJob.SetTarget(cellInd, storeCell);
                             curJob.count = int.MaxValue;
                             curJob.haulOpportunisticDuplicates = false;
                             curJob.haulMode = HaulMode.ToCellNonStorage;
-                            if (nextToilOnPlaceFailOrIncomplete != null)
-                                actor.jobs.curDriver.JumpToToil(nextToilOnPlaceFailOrIncomplete);
+                            actor.jobs.curDriver.JumpToToil(nextToilOnPlaceFailOrIncomplete);
                         }
                         else
                         {
@@ -144,6 +154,13 @@ namespace RRRR
         private static bool IsR4WorkJob(Job job)
         {
             return job?.def == R4DefOf.RRRR_Repair || job?.def == R4DefOf.RRRR_Clean;
+        }
+
+        private static void AbortRedirectedHaul(Pawn actor, Job curJob, string reason)
+        {
+            R4Log.Warn(
+                $"PlaceHauledThingInCell: pawn={actor.LabelShort} jobId={curJob.loadID} aborting redirected haul for {curJob.def.defName}: {reason}");
+            actor.jobs.curDriver.EndJobWith(JobCondition.Incompletable);
         }
 
         private static string DescribeThing(Thing thing)
