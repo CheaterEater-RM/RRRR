@@ -103,7 +103,7 @@ namespace RRRR
                 if (skillReq != null)
                     continue;
 
-                List<Thing> candidates = FindCandidateItems(pawn, workbench, bill, forced);
+                List<Thing> candidates = FindCandidateItems(pawn, workbench, bill, forced, out bool bisActive);
                 R4Log.Debug(
                     $"Clean bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
 
@@ -111,17 +111,19 @@ namespace RRRR
                 {
                     Thing item = candidates[c];
                     List<ThingDefCountClass> cleanCost = MaterialUtility.GetCleanCost(item);
+                    var ingredientCounts = MaterialUtility.BuildIngredientCounts(cleanCost);
+                    var chosenThings = new List<ThingCount>();
 
-                    List<Thing> foundThings = null;
-                    List<int> foundCounts = null;
+                    // When BIS controls item selection, it sets ingredientSearchRadius to 0.
+                    // Materials still need a normal search radius — use vanilla default (999f).
+                    float materialSearchRadius = bisActive ? 999f : bill.ingredientSearchRadius;
 
-                    if (cleanCost.Count > 0 && !MaterialUtility.TryFindIngredients(
-                            cleanCost,
-                            pawn,
-                            workbench.Position,
-                            bill.ingredientSearchRadius,
-                            out foundThings,
-                            out foundCounts))
+                    bool ingredientsFound = ingredientCounts.Count == 0 ||
+                        WorkGiver_DoBill.TryFindBestFixedIngredients(
+                            ingredientCounts, pawn, workbench, chosenThings,
+                            materialSearchRadius);
+
+                    if (!ingredientsFound)
                     {
                         continue;
                     }
@@ -139,13 +141,10 @@ namespace RRRR
                     job.targetQueueB = new List<LocalTargetInfo>();
                     job.countQueue = new List<int>();
 
-                    if (foundThings != null)
+                    for (int i = 0; i < chosenThings.Count; i++)
                     {
-                        for (int i = 0; i < foundThings.Count; i++)
-                        {
-                            job.targetQueueB.Add(foundThings[i]);
-                            job.countQueue.Add(foundCounts[i]);
-                        }
+                        job.targetQueueB.Add(chosenThings[i].Thing);
+                        job.countQueue.Add(chosenThings[i].Count);
                     }
 
                     return job;
@@ -165,9 +164,10 @@ namespace RRRR
         /// sorted by distance to the workbench (matching vanilla bill behaviour).
         /// Uses region traversal for efficiency rather than a full map scan.
         /// </summary>
-        private List<Thing> FindCandidateItems(Pawn pawn, Thing workbench, Bill bill, bool forced)
+        private List<Thing> FindCandidateItems(Pawn pawn, Thing workbench, Bill bill, bool forced, out bool bisActive)
         {
             var candidates = new List<Thing>();
+            bisActive = false;
 
             IntVec3 rootCell = (workbench is Building building && building.def.hasInteractionCell)
                 ? building.InteractionCell : workbench.Position;
@@ -175,8 +175,42 @@ namespace RRRR
             if (rootReg == null)
                 return candidates;
 
+            // BIS fast path: when a storage source is configured, iterate the BIS
+            // candidate list directly instead of traversing every region on the map.
+            HashSet<int> bisIDs = BISCompat.GetStorageCandidateIDs(bill, pawn.Map);
+            if (bisIDs != null)
+            {
+                bisActive = true;
+                var bisThings = BISCompat.GetStorageCandidateThings(bill, pawn.Map);
+                if (bisThings != null)
+                {
+                    for (int i = 0; i < bisThings.Count; i++)
+                    {
+                        Thing thing = bisThings[i];
+                        if (thing.IsForbidden(pawn) || !pawn.CanReserve(thing, 1, -1, null, forced))
+                            continue;
+                        if (!bill.IsFixedOrAllowedIngredient(thing))
+                            continue;
+                        if (!(thing is Apparel apparel) || !apparel.WornByCorpse)
+                            continue;
+                        if (!pawn.CanReach(thing, PathEndMode.ClosestTouch, pawn.NormalMaxDanger()))
+                            continue;
+
+                        candidates.Add(thing);
+                    }
+                }
+
+                IntVec3 benchPos = workbench.Position;
+                candidates.Sort((a, b) =>
+                    (a.Position - benchPos).LengthHorizontalSquared
+                        .CompareTo((b.Position - benchPos).LengthHorizontalSquared));
+
+                return candidates;
+            }
+
             float searchRadius = bill.ingredientSearchRadius;
             float radiusSq = searchRadius * searchRadius;
+            bool  useRadius = searchRadius > 0f && searchRadius < 9999f;
             TraverseParms traverseParms = TraverseParms.For(pawn);
 
             RegionEntryPredicate entryCondition = (from, region) =>
@@ -192,7 +226,7 @@ namespace RRRR
                     Thing thing = things[i];
                     if (thing.IsForbidden(pawn) || !pawn.CanReserve(thing, 1, -1, null, forced))
                         continue;
-                    if ((thing.Position - workbench.Position).LengthHorizontalSquared > radiusSq)
+                    if (useRadius && (thing.Position - workbench.Position).LengthHorizontalSquared > radiusSq)
                         continue;
                     if (!bill.IsFixedOrAllowedIngredient(thing))
                         continue;
@@ -207,10 +241,10 @@ namespace RRRR
 
             RegionTraverser.BreadthFirstTraverse(rootReg, entryCondition, regionProcessor, 99999);
 
-            IntVec3 benchPos = workbench.Position;
+            IntVec3 benchPos2 = workbench.Position;
             candidates.Sort((a, b) =>
-                (a.Position - benchPos).LengthHorizontalSquared
-                    .CompareTo((b.Position - benchPos).LengthHorizontalSquared));
+                (a.Position - benchPos2).LengthHorizontalSquared
+                    .CompareTo((b.Position - benchPos2).LengthHorizontalSquared));
 
             return candidates;
         }

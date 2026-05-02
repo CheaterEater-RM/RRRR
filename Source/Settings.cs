@@ -140,6 +140,7 @@ namespace RRRR
         public override void WriteSettings()
         {
             base.WriteSettings();
+            R4WorkbenchFilterCache.Build();
             ApplySettings(force: true);
         }
 
