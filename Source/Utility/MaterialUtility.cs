@@ -277,6 +277,31 @@ namespace RRRR
         // ================================================================
 
         /// <summary>
+        /// Convert dynamic per-item costs into IngredientCount objects suitable
+        /// for WorkGiver_DoBill.TryFindBestFixedIngredients. Each ThingDefCountClass
+        /// becomes an IngredientCount with a filter allowing exactly that ThingDef.
+        /// </summary>
+        public static List<IngredientCount> BuildIngredientCounts(List<ThingDefCountClass> costs)
+        {
+            if (costs == null)
+                return new List<IngredientCount>();
+
+            var result = new List<IngredientCount>(costs.Count);
+            for (int i = 0; i < costs.Count; i++)
+            {
+                var cost = costs[i];
+                if (cost.thingDef == null || cost.count <= 0)
+                    continue;
+                var ic = new IngredientCount();
+                ic.filter = new ThingFilter();
+                ic.filter.SetAllow(cost.thingDef, true);
+                ic.SetBaseCount(cost.count);
+                result.Add(ic);
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Find and reserve ingredients for repair/clean within a search radius
         /// from the given origin (typically the bench position).
         /// </summary>

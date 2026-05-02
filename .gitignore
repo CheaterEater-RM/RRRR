@@ -44,3 +44,5 @@ build_restore_err.log
 .github/
 CLAUDE.md
 Mending Examples/
+
+.dotnet/

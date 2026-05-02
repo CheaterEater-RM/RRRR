@@ -13,6 +13,8 @@ namespace RRRR
             var harmony = new Harmony("com.cheatereater.rrrr");
             harmony.PatchAll();
 
+            BISCompat.Initialize();
+
             // Verify required defs — errors are always shown regardless of debug setting
             VerifyDef<DesignationDef>("R4_Recycle");
             VerifyDef<DesignationDef>("R4_Repair");

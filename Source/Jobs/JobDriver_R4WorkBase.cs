@@ -346,6 +346,12 @@ namespace RRRR
                 pawn.skills?.Learn(SkillDefOf.Crafting, GetSkillXpPerTick() * delta);
                 pawn.GainComfortFromCellIfPossible(delta, chairsOnly: true);
 
+                // Vanilla checks for job overrides every 1000 ticks on long bills
+                if (IsBillDriven && cycleWorkTotal > 3000f && pawn.IsHashIntervalTick(1000))
+                {
+                    pawn.jobs.CheckForJobOverride();
+                }
+
                 if (cycleWorkLeft <= 0f)
                 {
                     R4Log.Debug(
@@ -402,6 +408,16 @@ namespace RRRR
                     $"Finish ingredients {job.def.defName}: {DescribeJobContext(item)} " +
                     $"extracted={MaterialUtility.DescribeThingList(extractedIngredients)}");
                 MaterialUtility.LogPlacedIngredientMismatch(job, extractedIngredients, cycleCost);
+
+                // Bill notification — before destroying ingredients, matching vanilla
+                // (Notify_IterationCompleted receives live ingredient refs)
+                if (IsBillDriven)
+                {
+                    var products = new List<Thing> { item };
+                    job.bill.Notify_IterationCompleted(pawn, extractedIngredients);
+                    RecordsUtility.Notify_BillDone(pawn, products);
+                }
+
                 MaterialUtility.DestroyExtractedIngredients(extractedIngredients);
 
                 // Apply the subclass-specific work result
@@ -421,13 +437,91 @@ namespace RRRR
                 // Remove designation if work is complete
                 if (!ShouldContinueWorking(item))
                     RemoveDesignation(item);
-
-                // Bill notification
-                if (IsBillDriven)
-                    job.bill.Notify_IterationCompleted(pawn, new List<Thing> { item });
             };
 
             yield return finishToil;
+
+            // ── Phase 5: Store repaired/cleaned item per bill store mode ──
+
+            Toil storeToil = ToilMaker.MakeToil("R4_Work_Store");
+            storeToil.defaultCompleteMode = ToilCompleteMode.Instant;
+            storeToil.initAction = delegate
+            {
+                if (!IsBillDriven)
+                {
+                    EndJobWith(JobCondition.Succeeded);
+                    return;
+                }
+
+                Thing item = WorkItem;
+                if (item == null || item.Destroyed || !item.Spawned || item.Map != pawn.Map)
+                {
+                    EndJobWith(JobCondition.Succeeded);
+                    return;
+                }
+
+                if (job.bill.GetStoreMode() == BillStoreModeDefOf.DropOnFloor)
+                {
+                    DropItemNearPawn(item);
+                    EndJobWith(JobCondition.Succeeded);
+                    return;
+                }
+
+                IntVec3 foundCell = IntVec3.Invalid;
+
+                if (job.bill.GetStoreMode() == BillStoreModeDefOf.BestStockpile)
+                {
+                    StoreUtility.TryFindBestBetterStoreCellFor(
+                        item, pawn, pawn.Map, StoragePriority.Unstored,
+                        pawn.Faction, out foundCell);
+                }
+                else if (job.bill.GetStoreMode() == BillStoreModeDefOf.SpecificStockpile)
+                {
+                    StoreUtility.TryFindBestBetterStoreCellForIn(
+                        item, pawn, pawn.Map, StoragePriority.Unstored,
+                        pawn.Faction, job.bill.GetSlotGroup(), out foundCell);
+                }
+
+                if (foundCell.IsValid)
+                {
+                    if (pawn.carryTracker.TryStartCarry(item, item.stackCount) > 0)
+                    {
+                        Job haulJob = HaulAIUtility.HaulToCellStorageJob(pawn, item, foundCell, fitInStoreCell: false);
+                        if (haulJob != null)
+                        {
+                            pawn.jobs.StartJob(haulJob, JobCondition.Succeeded,
+                                keepCarryingThingOverride: true);
+                        }
+                        else
+                        {
+                            pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out _);
+                            EndJobWith(JobCondition.Incompletable);
+                        }
+                    }
+                    else
+                    {
+                        EndJobWith(JobCondition.Succeeded);
+                    }
+                }
+                else
+                {
+                    // No valid stockpile cell — leave item where it is (matches vanilla)
+                    EndJobWith(JobCondition.Succeeded);
+                }
+            };
+
+            yield return storeToil;
+
+            void DropItemNearPawn(Thing item)
+            {
+                if (item == null || item.Destroyed || !item.Spawned)
+                    return;
+
+                if (pawn.carryTracker.TryStartCarry(item, item.stackCount) > 0)
+                {
+                    pawn.carryTracker.TryDropCarriedThing(pawn.Position, ThingPlaceMode.Near, out _);
+                }
+            }
         }
 
         // ── Helpers ────────────────────────────────────────────────────────
