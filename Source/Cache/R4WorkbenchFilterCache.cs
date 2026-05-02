@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using RimWorld;
@@ -279,6 +280,7 @@ namespace RRRR
         {
             // Build set of benches already covered by existing R4 RecipeDefs
             var coveredBenches = new HashSet<ThingDef>();
+            var skippedBenches = new List<string>();
             var r4Types = new HashSet<System.Type>
             {
                 typeof(RecipeWorker_R4Repair),
@@ -312,28 +314,44 @@ namespace RRRR
                 if (coveredBenches.Contains(bench)) continue;
 
                 // Only inject onto actual workbenches with a bills tab
-                if (bench.thingClass == null) continue;
-                if (!typeof(Building_WorkTable).IsAssignableFrom(bench.thingClass)) continue;
-                if (bench.inspectorTabs == null || !bench.inspectorTabs.Contains(typeof(ITab_Bills))) continue;
+                if (bench.thingClass == null ||
+                    !typeof(Building_WorkTable).IsAssignableFrom(bench.thingClass) ||
+                    bench.inspectorTabs == null ||
+                    !bench.inspectorTabs.Contains(typeof(ITab_Bills)))
+                {
+                    skippedBenches.Add(bench.defName);
+                    continue;
+                }
+
+                if (bench.recipes == null)
+                    bench.recipes = new List<RecipeDef>();
 
                 bool hasClean   = kvp.Value.Any(IsCleanEligible);
                 string safeName = bench.defName.Replace(" ", "_");
 
                 // Inject repair bill
-                InjectRecipeDef(repairTemplate,  $"RRRR_Repair_Mod_{safeName}",  bench, bench.recipes);
+                RecipeDef repairRecipe = InjectRecipeDef(repairTemplate,  $"RRRR_Repair_Mod_{safeName}",  bench, bench.recipes);
                 // Inject recycle bill
-                InjectRecipeDef(recycleTemplate, $"RRRR_Recycle_Mod_{safeName}", bench, bench.recipes);
+                RecipeDef recycleRecipe = InjectRecipeDef(recycleTemplate, $"RRRR_Recycle_Mod_{safeName}", bench, bench.recipes);
                 // Inject clean bill if bench has apparel items
+                RecipeDef cleanRecipe = null;
                 if (hasClean)
-                    InjectRecipeDef(cleanTemplate, $"RRRR_Clean_Mod_{safeName}", bench, bench.recipes);
+                    cleanRecipe = InjectRecipeDef(cleanTemplate, $"RRRR_Clean_Mod_{safeName}", bench, bench.recipes);
 
                 // Recycle intentionally stays on the bench's existing DoBill-compatible
                 // WorkGiver. Only repair and clean need custom bill WorkGivers because
                 // they bypass vanilla's normal bill execution path.
                 // Inject custom WorkGiverDefs for the bill pipeline where needed.
-                InjectRepairBillWorkGiver(bench, safeName);
+                WorkGiverDef repairWorkGiver = InjectRepairBillWorkGiver(bench, safeName);
+                ValidateInjectedRecipeDef(bench, repairRecipe);
+                ValidateInjectedRecipeDef(bench, recycleRecipe);
+                ValidateInjectedWorkGiverDef(bench, repairWorkGiver);
                 if (hasClean)
-                    InjectCleanBillWorkGiver(bench, safeName);
+                {
+                    WorkGiverDef cleanWorkGiver = InjectCleanBillWorkGiver(bench, safeName);
+                    ValidateInjectedRecipeDef(bench, cleanRecipe);
+                    ValidateInjectedWorkGiverDef(bench, cleanWorkGiver);
+                }
 
                 R4Log.Debug($"Injected R4 bills onto modded bench: {bench.defName}");
                 injected++;
@@ -341,9 +359,19 @@ namespace RRRR
 
             if (injected > 0)
                 R4Log.Debug($"Injected R4 bills onto {injected} modded bench(es).");
+
+            if (skippedBenches.Count > 0)
+            {
+                string preview = string.Join(", ", skippedBenches.Take(10));
+                if (skippedBenches.Count > 10)
+                    preview += ", ...";
+
+                R4Log.Warn(
+                    $"Skipped dynamic R4 bill injection on {skippedBenches.Count} bench(es) that do not satisfy Building_WorkTable + ITab_Bills prerequisites: {preview}");
+            }
         }
 
-        static void InjectRecipeDef(RecipeDef template, string defName, ThingDef bench, List<RecipeDef> benchRecipes)
+        static RecipeDef InjectRecipeDef(RecipeDef template, string defName, ThingDef bench, List<RecipeDef> benchRecipes)
         {
             // Deep-copy ingredients to avoid mutating the template's IngredientCount objects.
             // PatchRecipeFilters sets recipe.ingredients[0].filter on each clone independently;
@@ -374,7 +402,7 @@ namespace RRRR
                 soundWorking            = template.soundWorking,
                 workerClass             = template.workerClass,
                 requiredGiverWorkType   = template.requiredGiverWorkType,
-                ingredients             = clonedIngredients,
+                ingredients             = clonedIngredients ?? new List<IngredientCount>(),
                 fixedIngredientFilter   = new ThingFilter(), // rebuilt by PatchRecipeFilters
                 defaultIngredientFilter = new ThingFilter(), // must be non-null; synced by PatchRecipeFilters
                 recipeUsers             = new List<ThingDef> { bench },
@@ -382,13 +410,16 @@ namespace RRRR
 
             recipe.ResolveDefNameHash();
             DefDatabase<RecipeDef>.Add(recipe);
+            recipe.ResolveReferences();
 
             // Also add directly to the bench's recipes list
             if (benchRecipes != null && !benchRecipes.Contains(recipe))
                 benchRecipes.Add(recipe);
+
+            return recipe;
         }
 
-        static void InjectRepairBillWorkGiver(ThingDef bench, string safeName)
+        static WorkGiverDef InjectRepairBillWorkGiver(ThingDef bench, string safeName)
         {
             // Determine work type from our cache, fall back to Crafting
             if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
@@ -415,9 +446,11 @@ namespace RRRR
 
             wg.ResolveDefNameHash();
             DefDatabase<WorkGiverDef>.Add(wg);
+            wg.ResolveReferences();
+            return wg;
         }
 
-        static void InjectCleanBillWorkGiver(ThingDef bench, string safeName)
+        static WorkGiverDef InjectCleanBillWorkGiver(ThingDef bench, string safeName)
         {
             if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
                 workType = DefDatabase<WorkTypeDef>.GetNamedSilentFail("Crafting");
@@ -441,6 +474,76 @@ namespace RRRR
 
             wg.ResolveDefNameHash();
             DefDatabase<WorkGiverDef>.Add(wg);
+            wg.ResolveReferences();
+            return wg;
+        }
+
+        static void ValidateInjectedRecipeDef(ThingDef bench, RecipeDef recipe)
+        {
+            if (recipe == null)
+                return;
+
+            if (DefDatabase<RecipeDef>.GetNamedSilentFail(recipe.defName) != recipe)
+            {
+                R4Log.Warn($"Injected recipe validation failed for {recipe.defName}: def database lookup did not return the injected instance.");
+            }
+
+            if (recipe.defaultIngredientFilter == null || recipe.fixedIngredientFilter == null)
+            {
+                R4Log.Warn($"Injected recipe validation failed for {recipe.defName}: ingredient filters were not initialized.");
+            }
+
+            if (bench.recipes == null || !bench.recipes.Contains(recipe))
+            {
+                R4Log.Warn($"Injected recipe validation failed for {recipe.defName}: bench {bench.defName} does not contain the injected recipe.");
+            }
+
+            bool foundBenchUser = false;
+            foreach (ThingDef recipeUser in AllRecipeUsers(recipe))
+            {
+                if (recipeUser == bench)
+                {
+                    foundBenchUser = true;
+                    break;
+                }
+            }
+
+            if (!foundBenchUser)
+            {
+                R4Log.Warn($"Injected recipe validation failed for {recipe.defName}: bench {bench.defName} is not visible in AllRecipeUsers.");
+            }
+        }
+
+        static void ValidateInjectedWorkGiverDef(ThingDef bench, WorkGiverDef workGiver)
+        {
+            if (workGiver == null)
+                return;
+
+            if (DefDatabase<WorkGiverDef>.GetNamedSilentFail(workGiver.defName) != workGiver)
+            {
+                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: def database lookup did not return the injected instance.");
+            }
+
+            if (workGiver.fixedBillGiverDefs == null || !workGiver.fixedBillGiverDefs.Contains(bench))
+            {
+                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: bench {bench.defName} is not in fixedBillGiverDefs.");
+            }
+
+            if (workGiver.workType == null)
+            {
+                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: workType is null.");
+            }
+
+            try
+            {
+                WorkGiver worker = workGiver.Worker;
+                if (worker == null)
+                    R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: Worker could not be instantiated.");
+            }
+            catch (Exception ex)
+            {
+                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: {ex}");
+            }
         }
 
         // ── Step 3: stamp filter onto every RRRR RecipeDef ───────────────────

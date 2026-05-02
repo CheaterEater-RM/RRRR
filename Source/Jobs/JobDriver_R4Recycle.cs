@@ -27,6 +27,14 @@ namespace RRRR
         {
             if (!pawn.Reserve(Item,  job, 1, -1, null, errorOnFailed)) return false;
             if (!pawn.Reserve(Bench, job, 1, -1, null, errorOnFailed)) return false;
+
+            Thing bench = Bench;
+            if (bench != null && bench.def.hasInteractionCell)
+            {
+                if (!pawn.ReserveSittableOrSpot(bench.InteractionCell, job, errorOnFailed))
+                    return false;
+            }
+
             return true;
         }
 
@@ -42,6 +50,19 @@ namespace RRRR
             this.FailOnDestroyedNullOrForbidden(ItemInd);
             this.FailOnDestroyedNullOrForbidden(BenchInd);
             this.FailOnThingMissingDesignation(ItemInd, R4DefOf.R4_Recycle);
+            this.FailOnBurningImmobile(BenchInd);
+            this.FailOn(delegate
+            {
+                Thing item = Item;
+                if (item == null || item.Destroyed)
+                    return true;
+
+                Thing bench = Bench;
+                if (bench is IBillGiver billGiver && !billGiver.CurrentlyUsableForBills())
+                    return true;
+
+                return false;
+            });
 
             yield return Toils_Goto.GotoThing(ItemInd, PathEndMode.ClosestTouch)
                 .FailOnSomeonePhysicallyInteracting(ItemInd);
@@ -77,11 +98,38 @@ namespace RRRR
 
             workToil.tickAction = delegate
             {
+                Thing item = Item;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+
                 pawn.rotationTracker.FaceTarget(Bench);
-                float pawnSpeed   = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed,      true);
+
+                if (Bench is IBillGiverWithTickAction tickBench)
+                    tickBench.UsedThisTick();
+            };
+
+            workToil.tickIntervalAction = delegate(int delta)
+            {
+                Thing item = Item;
+                if (item == null || item.Destroyed)
+                {
+                    EndJobWith(JobCondition.Incompletable);
+                    return;
+                }
+
+                float pawnSpeed = pawn.GetStatValue(StatDefOf.GeneralLaborSpeed, true);
                 float benchFactor = Bench.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor, true);
-                workLeft -= pawnSpeed * benchFactor;
-                pawn.skills?.Learn(SkillDefOf.Crafting, 0.1f);
+                float combinedSpeed = pawnSpeed * benchFactor;
+                if (DebugSettings.fastCrafting)
+                    combinedSpeed *= 30f;
+
+                workLeft -= combinedSpeed * delta;
+                pawn.skills?.Learn(SkillDefOf.Crafting, 0.1f * delta);
+                pawn.GainComfortFromCellIfPossible(delta, chairsOnly: true);
+
                 if (workLeft <= 0f)
                     ReadyForNextToil();
             };

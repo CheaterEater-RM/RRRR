@@ -24,6 +24,12 @@ namespace RRRR
         // Matches vanilla WorkGiver_DoBill.ReCheckFailedBillTicksRange
         private static readonly IntRange ReCheckFailedBillTicksRange = new IntRange(500, 600);
 
+        private int _cachedTick = -1;
+        private Pawn _cachedPawn;
+        private Thing _cachedWorkbench;
+        private bool _cachedForced;
+        private Job _cachedJob;
+
         private static bool IsRepairRecipe(RecipeDef recipe) =>
             recipe.workerClass == typeof(RecipeWorker_R4Repair);
 
@@ -41,10 +47,34 @@ namespace RRRR
 
         public override bool HasJobOnThing(Pawn pawn, Thing thing, bool forced = false)
         {
-            return JobOnThing(pawn, thing, forced) != null;
+            return GetOrCreateCachedJob(pawn, thing, forced) != null;
         }
 
         public override Job JobOnThing(Pawn pawn, Thing workbench, bool forced = false)
+        {
+            return GetOrCreateCachedJob(pawn, workbench, forced);
+        }
+
+        private Job GetOrCreateCachedJob(Pawn pawn, Thing workbench, bool forced)
+        {
+            int currentTick = Find.TickManager.TicksGame;
+            if (_cachedTick == currentTick && _cachedPawn == pawn && _cachedWorkbench == workbench && _cachedForced == forced)
+            {
+                R4Log.Debug(
+                    $"Repair bill cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob={_cachedJob != null}");
+                return _cachedJob;
+            }
+
+            Job job = CreateJobOnThing(pawn, workbench, forced);
+            _cachedTick = currentTick;
+            _cachedPawn = pawn;
+            _cachedWorkbench = workbench;
+            _cachedForced = forced;
+            _cachedJob = job;
+            return job;
+        }
+
+        private Job CreateJobOnThing(Pawn pawn, Thing workbench, bool forced)
         {
             if (!(workbench is IBillGiver billGiver))
                 return null;
@@ -52,11 +82,14 @@ namespace RRRR
                 return null;
             if (!billGiver.CurrentlyUsableForBills())
                 return null;
+            billGiver.BillStack.RemoveIncompletableBills();
             if (!billGiver.BillStack.AnyShouldDoNow)
                 return null;
             if (workbench.IsBurning() || workbench.IsForbidden(pawn))
                 return null;
             if (!pawn.CanReserve(workbench, 1, -1, null, forced))
+                return null;
+            if (workbench.def.hasInteractionCell && !pawn.CanReserveSittableOrSpot(workbench.InteractionCell, workbench, forced))
                 return null;
 
             foreach (Bill bill in billGiver.BillStack)
@@ -75,34 +108,62 @@ namespace RRRR
                 if (skillReq != null)
                     continue;
 
-                var candidates = FindCandidateItems(pawn, workbench, bill, forced);
+                var candidates = FindCandidateItems(pawn, workbench, bill, forced, out bool bisActive);
+                R4Log.Debug(
+                    $"Repair bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
 
                 for (int c = 0; c < candidates.Count; c++)
                 {
                     Thing item = candidates[c];
 
-                    Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
-                    job.count        = 1;
-                    job.bill         = bill;
-                    job.targetQueueA = new List<LocalTargetInfo> { item };
-                    job.targetQueueB = new List<LocalTargetInfo>();
-                    job.countQueue   = new List<int>();
-
                     // Minor mending: free, no materials needed
                     if (WorkGiver_R4Repair.IsMinorMending(item))
+                    {
+                        Job haulOff = WorkGiverUtility.HaulStuffOffBillGiverJob(pawn, billGiver, null);
+                        if (haulOff != null) return haulOff;
+
+                        Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
+                        job.count        = 1;
+                        job.bill         = bill;
+                        job.haulMode     = HaulMode.ToCellNonStorage;
+                        job.placedThings = null;
+                        job.targetQueueA = new List<LocalTargetInfo> { item };
+                        job.targetQueueB = new List<LocalTargetInfo>();
+                        job.countQueue   = new List<int>();
                         return job;
+                    }
 
                     var cycleCost = MaterialUtility.GetRepairCycleCost(item);
-                    if (cycleCost.Count == 0)
-                        return job; // costless item
+                    var ingredientCounts = MaterialUtility.BuildIngredientCounts(cycleCost);
+                    var chosenThings = new List<ThingCount>();
 
-                    if (MaterialUtility.TryFindIngredients(cycleCost, pawn, workbench.Position,
-                            bill.ingredientSearchRadius, out var foundThings, out var foundCounts))
+                    // When BIS controls item selection, it sets ingredientSearchRadius to 0.
+                    // Materials still need a normal search radius — use vanilla default (999f).
+                    float materialSearchRadius = bisActive ? 999f : bill.ingredientSearchRadius;
+
+                    bool ingredientsFound = ingredientCounts.Count == 0 ||
+                        WorkGiver_DoBill.TryFindBestFixedIngredients(
+                            ingredientCounts, pawn, workbench, chosenThings,
+                            materialSearchRadius);
+
+                    if (ingredientsFound)
                     {
-                        for (int i = 0; i < foundThings.Count; i++)
+                        Job haulOff = WorkGiverUtility.HaulStuffOffBillGiverJob(pawn, billGiver, null);
+                        if (haulOff != null) return haulOff;
+
+                        Job job = JobMaker.MakeJob(R4DefOf.RRRR_Repair, workbench);
+                        job.count        = 1;
+                        job.bill         = bill;
+                        job.haulMode     = HaulMode.ToCellNonStorage;
+                        job.placedThings = null;
+                        job.targetQueueA = new List<LocalTargetInfo> { item };
+                        job.targetQueueB = new List<LocalTargetInfo>();
+                        job.countQueue   = new List<int>();
+
+                        for (int i = 0; i < chosenThings.Count; i++)
                         {
-                            job.targetQueueB.Add(foundThings[i]);
-                            job.countQueue.Add(foundCounts[i]);
+                            job.targetQueueB.Add(chosenThings[i].Thing);
+                            job.countQueue.Add(chosenThings[i].Count);
                         }
                         return job;
                     }
@@ -123,9 +184,10 @@ namespace RRRR
         /// sorted by distance to the workbench (matching vanilla bill behaviour).
         /// Uses region traversal for efficiency rather than a full map scan.
         /// </summary>
-        private List<Thing> FindCandidateItems(Pawn pawn, Thing workbench, Bill bill, bool forced)
+        private List<Thing> FindCandidateItems(Pawn pawn, Thing workbench, Bill bill, bool forced, out bool bisActive)
         {
             var candidates = new List<Thing>();
+            bisActive = false;
 
             IntVec3 rootCell = (workbench is Building b && b.def.hasInteractionCell)
                 ? b.InteractionCell : workbench.Position;
@@ -133,8 +195,45 @@ namespace RRRR
             if (rootReg == null)
                 return candidates;
 
+            // BIS fast path: when a storage source is configured, iterate the BIS
+            // candidate list directly instead of traversing every region on the map.
+            HashSet<int> bisIDs = BISCompat.GetStorageCandidateIDs(bill, pawn.Map);
+            if (bisIDs != null)
+            {
+                bisActive = true;
+                // BIS gives us the full set of things in the selected storage.
+                // Apply R4 eligibility filters (damaged, reservable, allowed by bill).
+                var bisThings = BISCompat.GetStorageCandidateThings(bill, pawn.Map);
+                if (bisThings != null)
+                {
+                    for (int i = 0; i < bisThings.Count; i++)
+                    {
+                        Thing t = bisThings[i];
+                        if (t.IsForbidden(pawn) || !pawn.CanReserve(t, 1, -1, null, forced))
+                            continue;
+                        if (!bill.IsFixedOrAllowedIngredient(t))
+                            continue;
+                        if (!t.def.useHitPoints || t.HitPoints >= t.MaxHitPoints)
+                            continue;
+                        if (!pawn.CanReach(t, PathEndMode.ClosestTouch, pawn.NormalMaxDanger()))
+                            continue;
+
+                        candidates.Add(t);
+                    }
+                }
+
+                IntVec3 benchPos = workbench.Position;
+                candidates.Sort((a, b2) =>
+                    (a.Position - benchPos).LengthHorizontalSquared
+                    .CompareTo((b2.Position - benchPos).LengthHorizontalSquared));
+
+                R4Log.Debug($"BIS item filter: {candidates.Count} candidates from {bisThings?.Count ?? 0} storage items.");
+                return candidates;
+            }
+
             float searchRadius = bill.ingredientSearchRadius;
             float radiusSq     = searchRadius * searchRadius;
+            bool  useRadius    = searchRadius > 0f && searchRadius < 9999f;
             TraverseParms traverseParms = TraverseParms.For(pawn);
 
             RegionEntryPredicate entryCondition = (from, r) => r.Allows(traverseParms, isDestination: false);
@@ -147,8 +246,7 @@ namespace RRRR
                     Thing t = things[i];
                     if (t.IsForbidden(pawn) || !pawn.CanReserve(t, 1, -1, null, forced))
                         continue;
-                    // Radius measured from bench, matching vanilla ingredient search
-                    if ((t.Position - workbench.Position).LengthHorizontalSquared > radiusSq)
+                    if (useRadius && (t.Position - workbench.Position).LengthHorizontalSquared > radiusSq)
                         continue;
                     if (!bill.IsFixedOrAllowedIngredient(t))
                         continue;
@@ -164,10 +262,10 @@ namespace RRRR
 
             // Sort by distance to bench — closest to the work location first,
             // matching vanilla's ingredient prioritisation logic
-            IntVec3 benchPos = workbench.Position;
+            IntVec3 benchPos2 = workbench.Position;
             candidates.Sort((a, b2) =>
-                (a.Position - benchPos).LengthHorizontalSquared
-                .CompareTo((b2.Position - benchPos).LengthHorizontalSquared));
+                (a.Position - benchPos2).LengthHorizontalSquared
+                .CompareTo((b2.Position - benchPos2).LengthHorizontalSquared));
 
             return candidates;
         }

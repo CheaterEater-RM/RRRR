@@ -40,5 +40,8 @@ build_err.log
 build_restore.log
 build_restore_err.log
 *.binlog
-.dotnet/
+
 .github/
+CLAUDE.md
+
+.dotnet/
