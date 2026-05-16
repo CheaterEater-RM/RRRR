@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using RimWorld;
 using Verse;
@@ -13,18 +14,29 @@ namespace RRRR
     {
         private static readonly IntRange ReCheckFailedBillTicksRange = new IntRange(500, 600);
 
-        private static int _cachedTick = -1;
-        private static Pawn _cachedPawn;
-        private static Thing _cachedWorkbench;
-        private static bool _cachedForced;
-        private static int _cachedUpperExclusiveIndex;
-        private static Job _cachedJob;
+        private static int _cacheTick = -1;
+        private static readonly List<DispatchCacheEntry> DispatchCache = new List<DispatchCacheEntry>();
+
+        private sealed class DispatchCacheEntry
+        {
+            public Pawn Pawn;
+            public Thing Workbench;
+            public bool Forced;
+            public int UpperExclusiveIndex;
+            public Job Job;
+        }
 
         public static bool IsR4RepairOrClean(RecipeDef recipe)
         {
-            return recipe != null &&
-                   (recipe.workerClass == typeof(RecipeWorker_R4Repair) ||
-                    recipe.workerClass == typeof(RecipeWorker_R4Clean));
+            return IsRecipeWorker(recipe, typeof(RecipeWorker_R4Repair)) ||
+                   IsRecipeWorker(recipe, typeof(RecipeWorker_R4Clean));
+        }
+
+        public static bool IsRecipeWorker(RecipeDef recipe, Type workerType)
+        {
+            return recipe?.workerClass != null &&
+                   workerType != null &&
+                   workerType.IsAssignableFrom(recipe.workerClass);
         }
 
         public static bool HasAnyR4RepairOrCleanBill(IBillGiver billGiver)
@@ -72,38 +84,73 @@ namespace RRRR
             int upperExclusiveIndex, bool forced)
         {
             int currentTick = Find.TickManager.TicksGame;
-            if (_cachedTick == currentTick &&
-                _cachedPawn == pawn &&
-                _cachedWorkbench == workbench &&
-                _cachedForced == forced)
+            if (_cacheTick != currentTick)
             {
-                if (_cachedJob != null)
+                _cacheTick = currentTick;
+                DispatchCache.Clear();
+            }
+
+            DispatchCacheEntry cacheEntry = FindCacheEntry(pawn, workbench, forced);
+            if (cacheEntry != null && cacheEntry.UpperExclusiveIndex >= upperExclusiveIndex)
+            {
+                if (cacheEntry.Job != null)
                 {
-                    int cachedIndex = billGiver.BillStack.IndexOf(_cachedJob.bill);
+                    int cachedIndex = billGiver.BillStack.IndexOf(cacheEntry.Job.bill);
                     if (cachedIndex >= 0 && cachedIndex < upperExclusiveIndex)
                     {
-                        R4Log.Debug(
-                            $"R4 bill dispatch cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob=true");
-                        return _cachedJob;
+                        if (R4Log.DebugEnabled)
+                        {
+                            R4Log.Debug(
+                                $"R4 bill dispatch cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob=true");
+                        }
+
+                        return cacheEntry.Job;
                     }
                 }
 
-                if (_cachedJob == null && _cachedUpperExclusiveIndex >= upperExclusiveIndex)
+                if (cacheEntry.Job == null)
                 {
-                    R4Log.Debug(
-                        $"R4 bill dispatch cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob=false");
+                    if (R4Log.DebugEnabled)
+                    {
+                        R4Log.Debug(
+                            $"R4 bill dispatch cache hit: pawn={pawn.LabelShort} bench={workbench?.def?.defName ?? "null"} tick={currentTick} hasJob=false");
+                    }
+
                     return null;
                 }
             }
 
             Job job = TryDispatchAboveIndexUncached(pawn, workbench, billGiver, upperExclusiveIndex, forced);
-            _cachedTick = currentTick;
-            _cachedPawn = pawn;
-            _cachedWorkbench = workbench;
-            _cachedForced = forced;
-            _cachedUpperExclusiveIndex = upperExclusiveIndex;
-            _cachedJob = job;
+            if (cacheEntry == null)
+            {
+                cacheEntry = new DispatchCacheEntry
+                {
+                    Pawn = pawn,
+                    Workbench = workbench,
+                    Forced = forced,
+                };
+                DispatchCache.Add(cacheEntry);
+            }
+
+            cacheEntry.UpperExclusiveIndex = upperExclusiveIndex;
+            cacheEntry.Job = job;
             return job;
+        }
+
+        private static DispatchCacheEntry FindCacheEntry(Pawn pawn, Thing workbench, bool forced)
+        {
+            for (int i = 0; i < DispatchCache.Count; i++)
+            {
+                DispatchCacheEntry entry = DispatchCache[i];
+                if (entry.Pawn == pawn &&
+                    entry.Workbench == workbench &&
+                    entry.Forced == forced)
+                {
+                    return entry;
+                }
+            }
+
+            return null;
         }
 
         private static bool PassesCommonBenchPrechecks(
@@ -139,8 +186,6 @@ namespace RRRR
             if (billGiver?.BillStack == null)
                 return null;
 
-            billGiver.BillStack.RemoveIncompletableBills();
-
             int count = billGiver.BillStack.Count;
             int upper = upperExclusiveIndex < count ? upperExclusiveIndex : count;
             for (int i = 0; i < upper; i++)
@@ -164,9 +209,9 @@ namespace RRRR
                 }
 
                 Job job = null;
-                if (bill.recipe.workerClass == typeof(RecipeWorker_R4Repair))
+                if (IsRecipeWorker(bill.recipe, typeof(RecipeWorker_R4Repair)))
                     job = TryCreateRepairBillJob(pawn, workbench, bill, forced);
-                else if (bill.recipe.workerClass == typeof(RecipeWorker_R4Clean))
+                else if (IsRecipeWorker(bill.recipe, typeof(RecipeWorker_R4Clean)))
                     job = TryCreateCleanBillJob(pawn, workbench, bill, forced);
 
                 if (job != null)
@@ -186,8 +231,11 @@ namespace RRRR
         {
             IBillGiver billGiver = (IBillGiver)workbench;
             List<Thing> candidates = FindRepairCandidateItems(pawn, workbench, bill, forced, out bool bisActive);
-            R4Log.Debug(
-                $"Repair bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
+            if (R4Log.DebugEnabled)
+            {
+                R4Log.Debug(
+                    $"Repair bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
+            }
 
             for (int c = 0; c < candidates.Count; c++)
             {
@@ -227,8 +275,11 @@ namespace RRRR
         {
             IBillGiver billGiver = (IBillGiver)workbench;
             List<Thing> candidates = FindCleanCandidateItems(pawn, workbench, bill, forced, out bool bisActive);
-            R4Log.Debug(
-                $"Clean bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
+            if (R4Log.DebugEnabled)
+            {
+                R4Log.Debug(
+                    $"Clean bill scan: pawn={pawn.LabelShort} bench={workbench.def.defName} bill={bill.recipe.defName} candidates={candidates.Count}");
+            }
 
             for (int c = 0; c < candidates.Count; c++)
             {
@@ -339,7 +390,11 @@ namespace RRRR
                 }
 
                 SortByDistanceToBench(candidates, workbench);
-                R4Log.Debug($"BIS item filter: {candidates.Count} candidates from {bisThings?.Count ?? 0} storage items.");
+                if (R4Log.DebugEnabled)
+                {
+                    R4Log.Debug($"BIS item filter: {candidates.Count} candidates from {bisThings?.Count ?? 0} storage items.");
+                }
+
                 return candidates;
             }
 

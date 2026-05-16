@@ -446,11 +446,11 @@ namespace RRRR
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
                 HashSet<ThingDef> coveredBenches = null;
-                if (recipe.workerClass == typeof(RecipeWorker_R4Repair))
+                if (R4BillJobFactory.IsRecipeWorker(recipe, typeof(RecipeWorker_R4Repair)))
                     coveredBenches = repairRecipeBenches;
-                else if (recipe.workerClass == typeof(RecipeWorker_R4Recycle))
+                else if (R4BillJobFactory.IsRecipeWorker(recipe, typeof(RecipeWorker_R4Recycle)))
                     coveredBenches = recycleRecipeBenches;
-                else if (recipe.workerClass == typeof(RecipeWorker_R4Clean))
+                else if (R4BillJobFactory.IsRecipeWorker(recipe, typeof(RecipeWorker_R4Clean)))
                     coveredBenches = cleanRecipeBenches;
 
                 if (coveredBenches == null)
@@ -764,7 +764,7 @@ namespace RRRR
             }
             catch (Exception ex)
             {
-                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: {ex}");
+                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName} ({workGiver.giverClass?.Name ?? "null"}): {ex}");
             }
         }
 
@@ -778,9 +778,10 @@ namespace RRRR
 
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
-                if (recipe.workerClass != repairType  &&
-                    recipe.workerClass != recycleType &&
-                    recipe.workerClass != cleanType) continue;
+                bool isRepair = R4BillJobFactory.IsRecipeWorker(recipe, repairType);
+                bool isRecycle = R4BillJobFactory.IsRecipeWorker(recipe, recycleType);
+                bool isClean = R4BillJobFactory.IsRecipeWorker(recipe, cleanType);
+                if (!isRepair && !isRecycle && !isClean) continue;
 
                 var allowed = new HashSet<ThingDef>();
                 foreach (ThingDef bench in AllRecipeUsers(recipe))
@@ -789,9 +790,9 @@ namespace RRRR
                         allowed.UnionWith(craftables);
                 }
 
-                if (recipe.workerClass == repairType)
+                if (isRepair)
                     allowed.RemoveWhere(d => !IsRepairEligible(d));
-                else if (recipe.workerClass == recycleType)
+                else if (isRecycle)
                     allowed.RemoveWhere(d => !IsRecycleEligible(d));
                 else
                     allowed.RemoveWhere(d => !IsCleanEligible(d));

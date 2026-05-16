@@ -35,7 +35,15 @@ namespace RRRR
             {
                 vanillaIndex = billGiver.BillStack.IndexOf(__result.bill);
                 if (vanillaIndex < 0)
+                {
+                    if (R4Log.DebugEnabled)
+                    {
+                        R4Log.Debug(
+                            $"Skipped R4 bill ordering: vanilla returned a bill outside this stack for pawn={pawn.LabelShort} bench={thing?.def?.defName ?? "null"} bill={__result.bill.recipe?.defName ?? "null"}.");
+                    }
+
                     return;
+                }
             }
             else if (!R4BillJobFactory.PassesVanillaBenchPrechecks(__instance, pawn, thing, forced))
             {

@@ -32,8 +32,12 @@ namespace RRRR
         {
             if (!(workbench is IBillGiver billGiver))
                 return null;
+            if (billGiver.BillStack == null)
+                return null;
             if (def.fixedBillGiverDefs != null && !def.fixedBillGiverDefs.Contains(workbench.def))
                 return null;
+
+            billGiver.BillStack.RemoveIncompletableBills();
             if (!R4BillJobFactory.HasAnyR4RepairOrCleanBill(billGiver))
                 return null;
             if (!R4BillJobFactory.PassesFallbackBenchPrechecks(pawn, workbench, forced))
@@ -42,9 +46,6 @@ namespace RRRR
             Job refuelJob = R4BillJobFactory.RefuelJobIfNeeded(pawn, workbench, forced);
             if (refuelJob != null)
                 return refuelJob;
-            CompRefuelable compRefuelable = workbench.TryGetComp<CompRefuelable>();
-            if (compRefuelable != null && !compRefuelable.HasFuel)
-                return null;
 
             return R4BillJobFactory.TryDispatchAboveIndex(
                 pawn, workbench, billGiver, billGiver.BillStack.Count, forced);

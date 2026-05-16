@@ -9,9 +9,11 @@ namespace RRRR
     /// </summary>
     public static class R4Log
     {
+        public static bool DebugEnabled => RRRR_Mod.Settings?.debugLogging == true;
+
         public static void Debug(string msg)
         {
-            if (RRRR_Mod.Settings?.debugLogging == true)
+            if (DebugEnabled)
                 Log.Message($"[R4] {msg}");
         }
 
