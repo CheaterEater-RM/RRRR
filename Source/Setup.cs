@@ -22,6 +22,7 @@ namespace RRRR
             VerifyDef<JobDef>("RRRR_Recycle");
             VerifyDef<JobDef>("RRRR_Repair");
             VerifyDef<JobDef>("RRRR_Clean");
+            VerifyDef<WorkTypeDef>("RRRR_BillOnly");
             VerifyDef<RecipeDef>("RRRR_Repair_CraftingSpot");
             VerifyDef<RecipeDef>("RRRR_Repair_Tailor");
             VerifyDef<RecipeDef>("RRRR_Repair_Smithy");

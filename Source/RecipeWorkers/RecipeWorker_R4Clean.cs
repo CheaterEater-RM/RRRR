@@ -5,9 +5,9 @@ using Verse;
 namespace RRRR
 {
     /// <summary>
-    /// RecipeWorker for bill-based taint cleaning. Works with vanilla's JobDriver_DoBill.
-    /// The tainted apparel is the "ingredient". Instead of being destroyed, we
-    /// remove the taint and leave the item on the bench for hauling.
+    /// RecipeWorker for bill-based taint cleaning. The tainted apparel is the
+    /// "ingredient", but bill dispatch uses R4BillJobFactory + JobDriver_R4Clean
+    /// so materials and the apparel can be hauled together.
     /// </summary>
     public class RecipeWorker_R4Clean : RecipeWorker
     {
