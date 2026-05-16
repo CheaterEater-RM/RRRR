@@ -363,6 +363,8 @@ namespace RRRR
             workToil.WithProgressBar(BenchInd,
                 () => cycleWorkTotal <= 0f ? 0f : 1f - (cycleWorkLeft / cycleWorkTotal));
 
+            workToil.PlaySustainerOrSound(() => pawn.jobs.curJob?.bill?.recipe?.soundWorking);
+
             yield return workToil;
 
             // ── Phase 4: Apply result, consume ingredients ──

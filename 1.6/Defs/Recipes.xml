@@ -67,6 +67,7 @@
     <workAmount>1600</workAmount>
     <workSpeedStat>GeneralLaborSpeed</workSpeedStat>
     <workSkill>Crafting</workSkill>
+    <soundWorking>Recipe_Smith</soundWorking>
     <workerClass>RRRR.RecipeWorker_R4Recycle</workerClass>
     <ingredients>
       <li>
