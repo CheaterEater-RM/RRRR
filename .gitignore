@@ -45,3 +45,6 @@ build_restore_err.log
 CLAUDE.md
 
 .dotnet/
+Source/Backup/
+Source/UpgradeLog.htm
+Source/RRRR.csproj.lscache

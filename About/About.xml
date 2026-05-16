@@ -7,7 +7,7 @@
     <li>1.6</li>
   </supportedVersions>
   <description>R⁴: Rimworld Reduce, Reuse, and Recycle. Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
-  <modVersion>1.35</modVersion>
+  <modVersion>1.36</modVersion>
 
   <modDependencies>
     <li>
@@ -26,5 +26,7 @@
     <li>Ludeon.RimWorld.Anomaly</li>
     <li>Ludeon.RimWorld.Odyssey</li>
     <li>Lk.billingredientsource</li>
+    <li>OskarPotocki.VanillaFactionsExpanded.Core</li>
+    <li>OskarPotocki.VFE.Classical</li>
   </loadAfter>
 </ModMetaData>

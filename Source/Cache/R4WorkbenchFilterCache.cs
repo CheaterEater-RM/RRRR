@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using HarmonyLib;
 using RimWorld;
 using Verse;
 
@@ -8,8 +9,9 @@ namespace RRRR
 {
     /// <summary>
     /// Startup cache that builds dynamic ThingFilters for each RRRR bill recipe
-    /// by inverting the recipeMaker.recipeUsers relationship, and auto-detects
-    /// modded workbenches to inject R4 bills and strip smelter recipes.
+    /// by inverting the recipeMaker.recipeUsers relationship, expanding VEF bench
+    /// aliases, and auto-detecting modded workbenches to inject R4 bill coverage
+    /// and strip smelter recipes.
     ///
     /// MOD COMPATIBILITY:
     ///
@@ -21,10 +23,10 @@ namespace RRRR
     ///   pre-existing saved bills on these benches.
     ///
     /// New workbench detection:
-    ///   After the cache is built, any bench in BenchCraftables that isn't already
-    ///   covered by an existing R4 RecipeDef gets dynamic R4 RecipeDefs and
-    ///   WorkGiverDefs injected into the game at runtime. This means modded
-    ///   workbenches automatically receive repair/recycle/clean bills.
+    ///   After the cache is built, benches in BenchCraftables are checked for
+    ///   missing R4 recipe coverage and missing custom bill WorkGivers. This lets
+    ///   modded benches inherit existing R4 recipes (for example via VEF) while
+    ///   still receiving the repair/clean bill WorkGivers those recipes require.
     ///
     /// The approach relies on two sources of bench-item relationships:
     ///   1. item.recipeMaker.recipeUsers  — items listing their benches (primary)
@@ -70,13 +72,16 @@ namespace RRRR
             BenchCraftables.Clear();
             BenchWorkTypes.Clear();
             ExplicitlyExcludedItems.Clear();
+            WorkbenchRouter.Reset();
 
             BuildEligibilityExclusions();
             StripSmelterRecipes();
             BuildBenchWorkTypes();
+            ExpandVEFInheritedBenches();
             BuildFromRecipeMakers();
             BuildFromRecipeSideUsers();
             AssignFallbacks();
+            UnionVEFAliasedBenchCraftables();
             InjectModdedBenchBills();
             PatchRecipeFilters();
             WorkbenchRouter.BuildFallbackCache();
@@ -165,6 +170,49 @@ namespace RRRR
             R4Log.Debug($"BenchWorkTypes: {BenchWorkTypes.Count} benches mapped.");
         }
 
+        static void ExpandVEFInheritedBenches()
+        {
+            Type extType = GenTypes.GetTypeInAnyAssembly("VEF.Buildings.RecipeInheritanceExtension");
+            if (extType == null)
+                return;
+
+            var field = AccessTools.Field(extType, "inheritRecipesFrom");
+            if (field == null)
+            {
+                R4Log.Warn("VEF.Buildings.RecipeInheritanceExtension found but 'inheritRecipesFrom' field is missing. VEF alias expansion skipped.");
+                return;
+            }
+
+            int registered = 0;
+            foreach (ThingDef bench in DefDatabase<ThingDef>.AllDefsListForReading)
+            {
+                if (bench.modExtensions == null || bench.modExtensions.Count == 0)
+                    continue;
+
+                for (int i = 0; i < bench.modExtensions.Count; i++)
+                {
+                    DefModExtension ext = bench.modExtensions[i];
+                    if (ext == null || !extType.IsInstanceOfType(ext))
+                        continue;
+
+                    if (!(field.GetValue(ext) is IEnumerable<ThingDef> sourceBenches))
+                        continue;
+
+                    foreach (ThingDef sourceBench in sourceBenches)
+                    {
+                        if (!WorkbenchRouter.RegisterAlias(sourceBench, bench))
+                            continue;
+
+                        registered++;
+                        R4Log.Debug($"VEF alias: {bench.defName} inherits from {sourceBench.defName}");
+                    }
+                }
+            }
+
+            if (registered > 0)
+                R4Log.Debug($"Registered {registered} VEF bench inheritance alias(es).");
+        }
+
         // ── Step 1: invert item.recipeMaker.recipeUsers ────────────────────────
 
         static void BuildFromRecipeMakers()
@@ -236,6 +284,36 @@ namespace RRRR
             R4Log.Debug($"{count} items assigned via techLevel fallback.");
         }
 
+        static void UnionVEFAliasedBenchCraftables()
+        {
+            if (!WorkbenchRouter.HasAliases)
+                return;
+
+            int propagated = 0;
+
+            foreach (KeyValuePair<ThingDef, List<ThingDef>> kvp in WorkbenchRouter.GetAllAliases())
+            {
+                ThingDef sourceBench = kvp.Key;
+                if (!BenchCraftables.TryGetValue(sourceBench, out HashSet<ThingDef> sourceItems))
+                    continue;
+
+                List<ThingDef> aliasBenches = kvp.Value;
+                for (int i = 0; i < aliasBenches.Count; i++)
+                {
+                    ThingDef aliasBench = aliasBenches[i];
+                    if (!BenchCraftables.TryGetValue(aliasBench, out HashSet<ThingDef> aliasItems))
+                        BenchCraftables[aliasBench] = aliasItems = new HashSet<ThingDef>();
+
+                    int before = aliasItems.Count;
+                    aliasItems.UnionWith(sourceItems);
+                    propagated += aliasItems.Count - before;
+                }
+            }
+
+            if (propagated > 0)
+                R4Log.Debug($"VEF alias union: {propagated} item-bench mapping(s) propagated.");
+        }
+
         static Dictionary<TechLevel, ThingDef> BuildFallbackMap()
         {
             ThingDef craftingSpot   = DefDatabase<ThingDef>.GetNamedSilentFail("CraftingSpot");
@@ -268,31 +346,55 @@ namespace RRRR
         // ── Step 2b: inject R4 bills onto modded benches ──────────────────────
 
         /// <summary>
-        /// For any bench in BenchCraftables that isn't already covered by an
-        /// existing R4 RecipeDef, dynamically create and inject repair + recycle
-        /// (and clean, if the bench has apparel) RecipeDefs and a WorkGiverDef
-        /// for the bill pipeline.
+        /// For any bench in BenchCraftables, ensure the full R4 bill surface is
+        /// present: repair/recycle recipes, clean when apparel is relevant, and the
+        /// custom repair/clean bill WorkGivers required by the non-vanilla paths.
         ///
         /// This means mods adding new weapon/apparel workbenches automatically
-        /// get R4 bills without requiring explicit compatibility patches.
+        /// get R4 bill support without requiring explicit compatibility patches.
         /// </summary>
         static void InjectModdedBenchBills()
         {
-            // Build set of benches already covered by existing R4 RecipeDefs
-            var coveredBenches = new HashSet<ThingDef>();
+            var repairRecipeBenches = new HashSet<ThingDef>();
+            var recycleRecipeBenches = new HashSet<ThingDef>();
+            var cleanRecipeBenches = new HashSet<ThingDef>();
+            var repairBillWorkGiverBenches = new HashSet<ThingDef>();
+            var cleanBillWorkGiverBenches = new HashSet<ThingDef>();
             var skippedBenches = new List<string>();
-            var r4Types = new HashSet<System.Type>
-            {
-                typeof(RecipeWorker_R4Repair),
-                typeof(RecipeWorker_R4Recycle),
-                typeof(RecipeWorker_R4Clean),
-            };
 
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
-                if (!r4Types.Contains(recipe.workerClass)) continue;
+                HashSet<ThingDef> coveredBenches = null;
+                if (recipe.workerClass == typeof(RecipeWorker_R4Repair))
+                    coveredBenches = repairRecipeBenches;
+                else if (recipe.workerClass == typeof(RecipeWorker_R4Recycle))
+                    coveredBenches = recycleRecipeBenches;
+                else if (recipe.workerClass == typeof(RecipeWorker_R4Clean))
+                    coveredBenches = cleanRecipeBenches;
+
+                if (coveredBenches == null)
+                    continue;
+
                 foreach (ThingDef bench in AllRecipeUsers(recipe))
                     coveredBenches.Add(bench);
+            }
+
+            foreach (WorkGiverDef workGiver in DefDatabase<WorkGiverDef>.AllDefsListForReading)
+            {
+                if (workGiver.fixedBillGiverDefs == null || workGiver.fixedBillGiverDefs.Count == 0)
+                    continue;
+
+                HashSet<ThingDef> coveredBenches = null;
+                if (workGiver.giverClass == typeof(WorkGiver_R4RepairBill))
+                    coveredBenches = repairBillWorkGiverBenches;
+                else if (workGiver.giverClass == typeof(WorkGiver_R4CleanBill))
+                    coveredBenches = cleanBillWorkGiverBenches;
+
+                if (coveredBenches == null)
+                    continue;
+
+                for (int i = 0; i < workGiver.fixedBillGiverDefs.Count; i++)
+                    coveredBenches.Add(workGiver.fixedBillGiverDefs[i]);
             }
 
             // Find template RecipeDefs to clone
@@ -306,12 +408,11 @@ namespace RRRR
                 return;
             }
 
-            int injected = 0;
+            int touchedBenches = 0;
 
             foreach (var kvp in BenchCraftables)
             {
                 ThingDef bench = kvp.Key;
-                if (coveredBenches.Contains(bench)) continue;
 
                 // Only inject onto actual workbenches with a bills tab
                 if (bench.thingClass == null ||
@@ -326,39 +427,70 @@ namespace RRRR
                 if (bench.recipes == null)
                     bench.recipes = new List<RecipeDef>();
 
-                bool hasClean   = kvp.Value.Any(IsCleanEligible);
+                bool hasClean = kvp.Value.Any(IsCleanEligible);
                 string safeName = bench.defName.Replace(" ", "_");
+                bool changed = false;
 
-                // Inject repair bill
-                RecipeDef repairRecipe = InjectRecipeDef(repairTemplate,  $"RRRR_Repair_Mod_{safeName}",  bench, bench.recipes);
-                // Inject recycle bill
-                RecipeDef recycleRecipe = InjectRecipeDef(recycleTemplate, $"RRRR_Recycle_Mod_{safeName}", bench, bench.recipes);
-                // Inject clean bill if bench has apparel items
+                RecipeDef repairRecipe = null;
+                RecipeDef recycleRecipe = null;
                 RecipeDef cleanRecipe = null;
-                if (hasClean)
+                WorkGiverDef repairWorkGiver = null;
+                WorkGiverDef cleanWorkGiver = null;
+
+                if (!repairRecipeBenches.Contains(bench))
+                {
+                    repairRecipe = InjectRecipeDef(repairTemplate, $"RRRR_Repair_Mod_{safeName}", bench, bench.recipes);
+                    repairRecipeBenches.Add(bench);
+                    changed = true;
+                }
+
+                if (!recycleRecipeBenches.Contains(bench))
+                {
+                    recycleRecipe = InjectRecipeDef(recycleTemplate, $"RRRR_Recycle_Mod_{safeName}", bench, bench.recipes);
+                    recycleRecipeBenches.Add(bench);
+                    changed = true;
+                }
+
+                if (hasClean && !cleanRecipeBenches.Contains(bench))
+                {
                     cleanRecipe = InjectRecipeDef(cleanTemplate, $"RRRR_Clean_Mod_{safeName}", bench, bench.recipes);
+                    cleanRecipeBenches.Add(bench);
+                    changed = true;
+                }
 
                 // Recycle intentionally stays on the bench's existing DoBill-compatible
                 // WorkGiver. Only repair and clean need custom bill WorkGivers because
                 // they bypass vanilla's normal bill execution path.
                 // Inject custom WorkGiverDefs for the bill pipeline where needed.
-                WorkGiverDef repairWorkGiver = InjectRepairBillWorkGiver(bench, safeName);
-                ValidateInjectedRecipeDef(bench, repairRecipe);
-                ValidateInjectedRecipeDef(bench, recycleRecipe);
-                ValidateInjectedWorkGiverDef(bench, repairWorkGiver);
-                if (hasClean)
+                if (!repairBillWorkGiverBenches.Contains(bench))
                 {
-                    WorkGiverDef cleanWorkGiver = InjectCleanBillWorkGiver(bench, safeName);
-                    ValidateInjectedRecipeDef(bench, cleanRecipe);
-                    ValidateInjectedWorkGiverDef(bench, cleanWorkGiver);
+                    repairWorkGiver = InjectRepairBillWorkGiver(bench, safeName);
+                    repairBillWorkGiverBenches.Add(bench);
+                    changed = true;
                 }
 
-                R4Log.Debug($"Injected R4 bills onto modded bench: {bench.defName}");
-                injected++;
+                if (hasClean && !cleanBillWorkGiverBenches.Contains(bench))
+                {
+                    cleanWorkGiver = InjectCleanBillWorkGiver(bench, safeName);
+                    cleanBillWorkGiverBenches.Add(bench);
+                    changed = true;
+                }
+
+                ValidateInjectedRecipeDef(bench, repairRecipe);
+                ValidateInjectedRecipeDef(bench, recycleRecipe);
+                ValidateInjectedRecipeDef(bench, cleanRecipe);
+                ValidateInjectedWorkGiverDef(bench, repairWorkGiver);
+                ValidateInjectedWorkGiverDef(bench, cleanWorkGiver);
+
+                if (!changed)
+                    continue;
+
+                R4Log.Debug($"Ensured R4 bill coverage on modded bench: {bench.defName}");
+                touchedBenches++;
             }
 
-            if (injected > 0)
-                R4Log.Debug($"Injected R4 bills onto {injected} modded bench(es).");
+            if (touchedBenches > 0)
+                R4Log.Debug($"Ensured R4 bill coverage on {touchedBenches} modded bench(es).");
 
             if (skippedBenches.Count > 0)
             {
@@ -447,6 +579,7 @@ namespace RRRR
             wg.ResolveDefNameHash();
             DefDatabase<WorkGiverDef>.Add(wg);
             wg.ResolveReferences();
+            RegisterDynamicWorkGiver(workType, wg);
             return wg;
         }
 
@@ -475,7 +608,37 @@ namespace RRRR
             wg.ResolveDefNameHash();
             DefDatabase<WorkGiverDef>.Add(wg);
             wg.ResolveReferences();
+            RegisterDynamicWorkGiver(workType, wg);
             return wg;
+        }
+
+        static void RegisterDynamicWorkGiver(WorkTypeDef workType, WorkGiverDef workGiver)
+        {
+            if (workType == null || workGiver == null)
+                return;
+
+            if (workType.workGiversByPriority == null)
+                workType.workGiversByPriority = new List<WorkGiverDef>();
+
+            // WorkTypeDef.ResolveReferences() only runs during initial def loading,
+            // so dynamically added WorkGiverDefs must be inserted into the runtime
+            // priority list manually or pawns will never consider them.
+            if (workType.workGiversByPriority.Contains(workGiver))
+                return;
+
+            int insertAt = workType.workGiversByPriority.Count;
+            for (int i = 0; i < workType.workGiversByPriority.Count; i++)
+            {
+                WorkGiverDef existing = workType.workGiversByPriority[i];
+                if (existing == null || existing.priorityInType < workGiver.priorityInType)
+                {
+                    insertAt = i;
+                    break;
+                }
+            }
+
+            workType.workGiversByPriority.Insert(insertAt, workGiver);
+            R4Log.Debug($"Registered dynamic WorkGiver {workGiver.defName} into {workType.defName} at priority {workGiver.priorityInType}.");
         }
 
         static void ValidateInjectedRecipeDef(ThingDef bench, RecipeDef recipe)

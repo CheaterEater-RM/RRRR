@@ -37,7 +37,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `JobDriver_R4Clean` | Designation flow: gather ingredients → haul item onto bench stack cells → work → remove taint |
 | `WorkGiver_R4DesignationBase` | Abstract base for all designation WorkGivers, handles bench routing by work type |
 | `MaterialUtility` | All material cost/return calculations, ingredient finding, sigmoid recycle curve |
-| `WorkbenchRouter` | Maps item → valid workbench(es) via `recipeMaker.recipeUsers` + fallback |
+| `WorkbenchRouter` | Maps item → valid workbench(es) via `recipeMaker.recipeUsers`, VEF bench aliases, and fallback |
 | `SkillUtility` | Tech difficulty, repair success checks, failure severity |
 | `R4WorkbenchFilterCache` | Startup cache: inverts recipeMaker.recipeUsers, builds per-bench filters, bench→WorkType map |
 | `Designator_RecycleThing` | Orders menu designator for drag-select recycling |
@@ -76,6 +76,8 @@ Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_
 ### Workbench Routing
 
 **Primary strategy:** Each item's `recipeMaker.recipeUsers` lists the benches where it was originally crafted. R4 routes the item to those same benches for recycling/repair. This means a revolver goes to the machining table, a longsword to the smithy, and a jacket to the tailor bench — automatically correct for vanilla and modded items.
+
+**VEF inheritance support:** If a bench inherits recipes via `VEF.Buildings.RecipeInheritanceExtension`, R4 expands the declared source bench into its aliased benches during cache build. This lets designation routing, gizmo bench labels, and dynamic R4 bill injection see benches like `VFEC_CraftingBench` even when the crafted item still only lists `CraftingSpot` in `recipeMaker.recipeUsers`.
 
 **Fallback** (for items without `recipeMaker`, e.g. quest rewards, trader goods, loot): Route by `techLevel` to an appropriate bench (Animal/Neolithic→CraftingSpot, Medieval→Smithy, Industrial→Machining, Spacer+→Fabrication). Last resort → machining table.
 **Eligibility:** Bench routing uses a broad gear predicate: `useHitPoints && (IsWeapon || IsApparel)`. Repair and recycle both use that same check. Clean uses the apparel subset of that rule. `smeltable` is not used for R4 eligibility. Explicit exclusions live in `1.6/Defs/EligibilityExclusions.xml` so outliers can be blocked without hardcoding them into the predicate.
