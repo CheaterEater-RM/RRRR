@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using HarmonyLib;
 using RimWorld;
 using Verse;
@@ -49,6 +50,17 @@ namespace RRRR
         public static readonly Dictionary<ThingDef, WorkTypeDef> BenchWorkTypes
             = new Dictionary<ThingDef, WorkTypeDef>();
 
+        /// <summary>
+        /// Vanilla benches whose catch-all predicates are evaluated by
+        /// ApplyCatchAllPredicates, in tier-ascending order. Consumed by
+        /// WorkbenchRouter.BuildFallbackCache so the merged bench list per
+        /// item is deterministic (tooltip stability). Order does NOT influence
+        /// designation routing — FindBench uses closest-reachable selection.
+        /// Benches missing from the def database are skipped here.
+        /// </summary>
+        public static readonly List<ThingDef> OrderedCatchAllBenches
+            = new List<ThingDef>();
+
         private static readonly HashSet<ThingDef> ExplicitlyExcludedItems
             = new HashSet<ThingDef>();
 
@@ -71,6 +83,7 @@ namespace RRRR
         {
             BenchCraftables.Clear();
             BenchWorkTypes.Clear();
+            OrderedCatchAllBenches.Clear();
             ExplicitlyExcludedItems.Clear();
             WorkbenchRouter.Reset();
 
@@ -80,7 +93,7 @@ namespace RRRR
             ExpandVEFInheritedBenches();
             BuildFromRecipeMakers();
             BuildFromRecipeSideUsers();
-            AssignFallbacks();
+            ApplyCatchAllPredicates();
             UnionVEFAliasedBenchCraftables();
             InjectModdedBenchBills();
             PatchRecipeFilters();
@@ -257,31 +270,119 @@ namespace RRRR
             }
         }
 
-        // ── Step 2: fallback for items with no recipeMaker ────────────────────
+        // ── Step 2: catch-all predicates per bench ────────────────────────────
 
-        static void AssignFallbacks()
+        /// <summary>
+        /// For each item, evaluate every vanilla bench's catch-all predicate and
+        /// add the item to BenchCraftables for every bench that matches. Items
+        /// can land on multiple benches simultaneously — this is intentional, so
+        /// each tier's benches collectively cover everything at that tier and
+        /// below. FabricationBench (≤ Archotech) is the true universal fallback.
+        ///
+        /// Per-bench HashSet handles dedup automatically: items already added by
+        /// BuildFromRecipeMakers/BuildFromRecipeSideUsers are silent no-ops.
+        ///
+        /// stuffCategories semantics: null or empty stuffCategories means a
+        /// fixed-cost item — it satisfies all "NOT X" clauses (contains none of
+        /// those categories) and fails all "X or Y" clauses (contains neither).
+        ///
+        /// TechLevel.Undefined is treated as Industrial via EffectiveTechLevel,
+        /// preserving the prior "Undefined → machining/fabrication" routing.
+        /// </summary>
+        static void ApplyCatchAllPredicates()
         {
-            var covered     = new HashSet<ThingDef>(BenchCraftables.Values.SelectMany(s => s));
-            var fallbackMap = BuildFallbackMap();
-            int count       = 0;
+            ThingDef craftingSpot   = DefDatabase<ThingDef>.GetNamedSilentFail("CraftingSpot");
+            ThingDef handTailor     = DefDatabase<ThingDef>.GetNamedSilentFail("HandTailoringBench");
+            ThingDef fueledSmithy   = DefDatabase<ThingDef>.GetNamedSilentFail("FueledSmithy");
+            ThingDef electricTailor = DefDatabase<ThingDef>.GetNamedSilentFail("ElectricTailoringBench");
+            ThingDef electricSmithy = DefDatabase<ThingDef>.GetNamedSilentFail("ElectricSmithy");
+            ThingDef machining      = DefDatabase<ThingDef>.GetNamedSilentFail("TableMachining");
+            ThingDef fabrication    = DefDatabase<ThingDef>.GetNamedSilentFail("FabricationBench");
+
+            StuffCategoryDef fabric   = DefDatabase<StuffCategoryDef>.GetNamedSilentFail("Fabric");
+            StuffCategoryDef leathery = DefDatabase<StuffCategoryDef>.GetNamedSilentFail("Leathery");
+            StuffCategoryDef metallic = DefDatabase<StuffCategoryDef>.GetNamedSilentFail("Metallic");
+            StuffCategoryDef woody    = DefDatabase<StuffCategoryDef>.GetNamedSilentFail("Woody");
+
+            var predicates = new List<(ThingDef bench, Func<ThingDef, bool> match)>(7);
+
+            if (craftingSpot != null)
+                predicates.Add((craftingSpot,
+                    d => EffectiveTechLevel(d) <= TechLevel.Neolithic));
+
+            if (handTailor != null)
+                predicates.Add((handTailor,
+                    d => (HasStuff(d, fabric) || HasStuff(d, leathery))
+                         && EffectiveTechLevel(d) <= TechLevel.Medieval));
+
+            if (fueledSmithy != null)
+                predicates.Add((fueledSmithy,
+                    d => !HasStuff(d, fabric) && !HasStuff(d, leathery)
+                         && EffectiveTechLevel(d) <= TechLevel.Medieval));
+
+            if (electricTailor != null)
+                predicates.Add((electricTailor,
+                    d => (HasStuff(d, fabric) || HasStuff(d, leathery))
+                         && EffectiveTechLevel(d) <= TechLevel.Industrial));
+
+            if (electricSmithy != null)
+                predicates.Add((electricSmithy,
+                    d => (!HasStuff(d, fabric) && !HasStuff(d, leathery)
+                          && EffectiveTechLevel(d) <= TechLevel.Medieval)
+                         || ((HasStuff(d, metallic) || HasStuff(d, woody))
+                             && EffectiveTechLevel(d) <= TechLevel.Industrial)));
+
+            if (machining != null)
+                predicates.Add((machining,
+                    d => !HasStuff(d, fabric) && !HasStuff(d, leathery)
+                         && !HasStuff(d, metallic) && !HasStuff(d, woody)
+                         && EffectiveTechLevel(d) <= TechLevel.Industrial));
+
+            if (fabrication != null)
+                predicates.Add((fabrication,
+                    d => EffectiveTechLevel(d) <= TechLevel.Archotech));
+
+            // Publish the bench list in tier-ascending order for WorkbenchRouter.
+            for (int i = 0; i < predicates.Count; i++)
+                OrderedCatchAllBenches.Add(predicates[i].bench);
+
+            int[] addedPerBench = new int[predicates.Count];
 
             foreach (ThingDef item in DefDatabase<ThingDef>.AllDefsListForReading)
             {
                 if (!IsR4Eligible(item)) continue;
-                if (covered.Contains(item)) continue;
 
-                ThingDef bench = GetFallbackBench(item, fallbackMap);
-                if (bench == null) continue;
+                for (int i = 0; i < predicates.Count; i++)
+                {
+                    if (!predicates[i].match(item)) continue;
 
-                if (!BenchCraftables.TryGetValue(bench, out HashSet<ThingDef> set))
-                    BenchCraftables[bench] = set = new HashSet<ThingDef>();
-                set.Add(item);
-                count++;
+                    ThingDef bench = predicates[i].bench;
+                    if (!BenchCraftables.TryGetValue(bench, out HashSet<ThingDef> set))
+                        BenchCraftables[bench] = set = new HashSet<ThingDef>();
 
-                R4Log.Debug($"Fallback → {item.defName} (tech={item.techLevel}) → {bench.defName}");
+                    if (set.Add(item))
+                        addedPerBench[i]++;
+                }
             }
 
-            R4Log.Debug($"{count} items assigned via techLevel fallback.");
+            var sb = new StringBuilder("Catch-all additions:");
+            for (int i = 0; i < predicates.Count; i++)
+            {
+                sb.Append(' ').Append(predicates[i].bench.defName)
+                  .Append('+').Append(addedPerBench[i]);
+            }
+            R4Log.Debug(sb.ToString());
+        }
+
+        static TechLevel EffectiveTechLevel(ThingDef def) =>
+            def.techLevel == TechLevel.Undefined ? TechLevel.Industrial : def.techLevel;
+
+        static bool HasStuff(ThingDef def, StuffCategoryDef cat)
+        {
+            if (cat == null || def.stuffCategories == null) return false;
+            // stuffCategories is typically 1–3 entries; List.Contains is O(n) but
+            // n is tiny, so allocation-free is preferred over building a HashSet.
+            return def.stuffCategories.Contains(cat);
         }
 
         static void UnionVEFAliasedBenchCraftables()
@@ -312,35 +413,6 @@ namespace RRRR
 
             if (propagated > 0)
                 R4Log.Debug($"VEF alias union: {propagated} item-bench mapping(s) propagated.");
-        }
-
-        static Dictionary<TechLevel, ThingDef> BuildFallbackMap()
-        {
-            ThingDef craftingSpot   = DefDatabase<ThingDef>.GetNamedSilentFail("CraftingSpot");
-            ThingDef fueledSmithy   = DefDatabase<ThingDef>.GetNamedSilentFail("FueledSmithy");
-            ThingDef electricSmithy = DefDatabase<ThingDef>.GetNamedSilentFail("ElectricSmithy");
-            ThingDef machining      = DefDatabase<ThingDef>.GetNamedSilentFail("TableMachining");
-            ThingDef fabrication    = DefDatabase<ThingDef>.GetNamedSilentFail("FabricationBench");
-            ThingDef smithy         = electricSmithy ?? fueledSmithy;
-
-            return new Dictionary<TechLevel, ThingDef>
-            {
-                { TechLevel.Animal,     craftingSpot },
-                { TechLevel.Neolithic,  craftingSpot },
-                { TechLevel.Medieval,   smithy       },
-                { TechLevel.Industrial, machining    },
-                { TechLevel.Spacer,     fabrication  },
-                { TechLevel.Ultra,      fabrication  },
-                { TechLevel.Archotech,  fabrication  },
-                { TechLevel.Undefined,  machining    },
-            };
-        }
-
-        static ThingDef GetFallbackBench(ThingDef item, Dictionary<TechLevel, ThingDef> map)
-        {
-            if (map.TryGetValue(item.techLevel, out ThingDef bench) && bench != null)
-                return bench;
-            return DefDatabase<ThingDef>.GetNamedSilentFail("TableMachining");
         }
 
         // ── Step 2b: inject R4 bills onto modded benches ──────────────────────

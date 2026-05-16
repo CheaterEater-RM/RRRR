@@ -37,7 +37,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `JobDriver_R4Clean` | Designation flow: gather ingredients → haul item onto bench stack cells → work → remove taint |
 | `WorkGiver_R4DesignationBase` | Abstract base for all designation WorkGivers, handles bench routing by work type |
 | `MaterialUtility` | All material cost/return calculations, ingredient finding, sigmoid recycle curve |
-| `WorkbenchRouter` | Maps item → valid workbench(es) via `recipeMaker.recipeUsers`, VEF bench aliases, and fallback |
+| `WorkbenchRouter` | Maps item → ordered list of valid workbench(es) via `recipeMaker.recipeUsers`, VEF bench aliases, and per-bench catch-all predicates; precomputed merged cache at startup |
 | `SkillUtility` | Tech difficulty, repair success checks, failure severity |
 | `R4WorkbenchFilterCache` | Startup cache: inverts recipeMaker.recipeUsers, builds per-bench filters, bench→WorkType map |
 | `Designator_RecycleThing` | Orders menu designator for drag-select recycling |
@@ -79,14 +79,30 @@ Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_
 
 **VEF inheritance support:** If a bench inherits recipes via `VEF.Buildings.RecipeInheritanceExtension`, R4 expands the declared source bench into its aliased benches during cache build. This lets designation routing, gizmo bench labels, and dynamic R4 bill injection see benches like `VFEC_CraftingBench` even when the crafted item still only lists `CraftingSpot` in `recipeMaker.recipeUsers`.
 
-**Fallback** (for items without `recipeMaker`, e.g. quest rewards, trader goods, loot): Route by `techLevel` to an appropriate bench (Animal/Neolithic→CraftingSpot, Medieval→Smithy, Industrial→Machining, Spacer+→Fabrication). Last resort → machining table.
+**Catch-all predicates:** After native bills are folded in, each vanilla bench has a predicate over `def.techLevel` and `def.stuffCategories` that catches additional items. The intent: each tier's benches collectively cover everything at that tier and below, so mod-added gear is routed without needing per-mod registration. Items can land on multiple benches simultaneously — that's deliberate, and dedup is per-bench via HashSet so native bills stay authoritative for benches that already list the item.
+
+| Bench | Catch-all predicate |
+|---|---|
+| CraftingSpot | `techLevel ≤ Neolithic` |
+| HandTailoringBench | `(Fabric or Leathery) AND techLevel ≤ Medieval` |
+| FueledSmithy | `(NOT Fabric AND NOT Leathery) AND techLevel ≤ Medieval` |
+| ElectricTailoringBench | `(Fabric or Leathery) AND techLevel ≤ Industrial` |
+| ElectricSmithy | `((NOT Fabric AND NOT Leathery) AND techLevel ≤ Medieval) OR ((Metallic or Woody) AND techLevel ≤ Industrial)` |
+| TableMachining | `(NOT Fabric AND NOT Leathery AND NOT Metallic AND NOT Woody) AND techLevel ≤ Industrial` |
+| FabricationBench | `techLevel ≤ Archotech` |
+
+`stuffCategories` semantics: null/empty means a fixed-cost item — it satisfies all "NOT X" clauses (contains none of those) and fails all "X or Y" clauses (contains neither). `TechLevel.Undefined` is treated as Industrial via `EffectiveTechLevel`, preserving the prior Undefined→machining/fabrication routing. FabricationBench's `≤ Archotech` ceiling deviates from the original `≤ Spacer` framing so Ultra/Archotech gear without `recipeMaker` is still covered; it is the true universal fallback.
+
+**Designation routing is closest-wins.** `WorkbenchRouter.GetValidBenches` returns an ordered list (recipeMaker first, then catch-all in tier order, then any other modded benches) for tooltip stability, but `WorkGiver_R4DesignationBase.FindBench` pools all matching benches and lets `GenClosest.ClosestThingReachable` pick the closest reachable one. Order does NOT decide routing — a Medieval longsword routes to a nearby FabricationBench in preference to a far FueledSmithy, by design.
+
 **Eligibility:** Bench routing uses a broad gear predicate: `useHitPoints && (IsWeapon || IsApparel)`. Repair and recycle both use that same check. Clean uses the apparel subset of that rule. `smeltable` is not used for R4 eligibility. Explicit exclusions live in `1.6/Defs/EligibilityExclusions.xml` so outliers can be blocked without hardcoding them into the predicate.
 
 `R4WorkbenchFilterCache` builds all mappings at startup:
-1. Inverts `recipeMaker.recipeUsers` → `BenchCraftables[bench] = {items}`
-2. Assigns fallback items by `techLevel`
+1. Inverts `recipeMaker.recipeUsers` → `BenchCraftables[bench] = {items}` (native bills)
+2. Applies catch-all predicates per bench (tier + stuff-category) so each tier collectively covers everything ≤ that tier
 3. Stamps per-bench ThingFilters onto every RRRR RecipeDef's `fixedIngredientFilter`
 4. Builds `BenchWorkTypes[bench] = WorkTypeDef` for designation WorkGiver routing
+5. Builds `WorkbenchRouter.MergedBenchCache` from the inverse of `BenchCraftables`, ordered (recipeMaker → catch-all tier → other) for tooltip stability
 
 ## XML Integration
 
@@ -160,9 +176,10 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 - `ThingDef.intricate` — true for components/advanced components
 
 ### Workbench Routing
-- `def.recipeMaker?.recipeUsers` — `List<ThingDef>` of benches where the item is crafted (primary routing)
-- Fallback: `R4WorkbenchFilterCache.BenchCraftables` (techLevel-based assignment)
-- Last resort: `TableMachining`
+- `WorkbenchRouter.GetValidBenches(item)` — returns the precomputed merged list (recipeMaker order → catch-all tier order → other). Tooltip-stable; routing is closest-wins via `GenClosest`.
+- `R4WorkbenchFilterCache.BenchCraftables` — bench → items, source of truth for both bill filters and merged router cache
+- `R4WorkbenchFilterCache.OrderedCatchAllBenches` — vanilla bench list in tier-ascending order used to make merged-list ordering deterministic
+- Last-resort safety: `TableMachining` when neither merged cache nor `recipeMaker` covers the item
 
 ### Workbench Usability
 - `((IBillGiver)bench).UsableForBillsAfterFueling()` — WorkGiver check (power + fuel)

@@ -363,7 +363,7 @@ namespace RRRR
             workToil.WithProgressBar(BenchInd,
                 () => cycleWorkTotal <= 0f ? 0f : 1f - (cycleWorkLeft / cycleWorkTotal));
 
-            workToil.PlaySustainerOrSound(() => pawn.jobs.curJob?.bill?.recipe?.soundWorking);
+            workToil.PlaySustainerOrSound(() => R4WorkbenchSoundUtility.WorkingSoundFor(pawn.jobs.curJob, Bench, WorkItem));
 
             yield return workToil;
 

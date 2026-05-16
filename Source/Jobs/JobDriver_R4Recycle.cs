@@ -20,19 +20,6 @@ namespace RRRR
         private float workLeft;
         private float totalWork;
 
-        private static readonly System.Collections.Generic.Dictionary<string, string> BenchSoundNames
-            = new System.Collections.Generic.Dictionary<string, string>
-        {
-            { "CraftingSpot",           "Recipe_Smith"  },
-            { "FueledSmithy",           "Recipe_Smith"  },
-            { "ElectricSmithy",         "Recipe_Smith"  },
-            { "TableMachining",         "Recipe_Smith"  },
-            { "FabricationBench",       "Recipe_Smith"  },
-            { "HandTailoringBench",     "Recipe_Tailor" },
-            { "ElectricTailoringBench", "Recipe_Tailor" },
-            { "VFEC_CraftingBench",     "Recipe_Smith"  },
-        };
-
         private Thing Item  => job.GetTarget(ItemInd).Thing;
         private Thing Bench => job.GetTarget(BenchInd).Thing;
 
@@ -149,17 +136,7 @@ namespace RRRR
 
             workToil.WithProgressBar(ItemInd, () => totalWork <= 0f ? 0f : 1f - (workLeft / totalWork));
 
-            workToil.PlaySustainerOrSound(() =>
-            {
-                var recipe = pawn.jobs.curJob?.bill?.recipe;
-                if (recipe != null) return recipe.soundWorking;
-
-                Thing bench = Bench;
-                if (bench != null && BenchSoundNames.TryGetValue(bench.def.defName, out string soundDefName))
-                    return DefDatabase<SoundDef>.GetNamedSilentFail(soundDefName);
-
-                return DefDatabase<SoundDef>.GetNamedSilentFail("Recipe_Tailor");
-            });
+            workToil.PlaySustainerOrSound(() => R4WorkbenchSoundUtility.WorkingSoundFor(pawn.jobs.curJob, Bench, Item));
 
             yield return workToil;
 
