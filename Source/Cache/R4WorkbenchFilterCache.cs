@@ -163,10 +163,10 @@ namespace RRRR
         {
             var vanillaType = typeof(WorkGiver_DoBill);
 
-            // Pass 1: vanilla WorkGiver_DoBill only (priority)
+            // Pass 1: WorkGiver_DoBill claimants, including subclasses.
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
-                if (wg.giverClass != vanillaType) continue;
+                if (wg.giverClass == null || !vanillaType.IsAssignableFrom(wg.giverClass)) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
@@ -180,7 +180,7 @@ namespace RRRR
             // Pass 2: modded WorkGivers — fill gaps only
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
-                if (wg.giverClass == vanillaType) continue;
+                if (wg.giverClass != null && vanillaType.IsAssignableFrom(wg.giverClass)) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
@@ -540,7 +540,7 @@ namespace RRRR
             if (fallbackDefs > 0)
             {
                 R4Log.Warn(
-                    $"Registered R4 unified bill fallback for {orphanFallbackBenches.Count} orphan bench(es) across {fallbackDefs} work type(s).");
+                    $"Registered R4 unified bill fallback for {orphanFallbackBenches.Count} orphan bench(es) with {fallbackDefs} per-bench scanner(s).");
             }
 
             if (skippedBenches.Count > 0)
@@ -608,8 +608,9 @@ namespace RRRR
                 return 0;
 
             WorkTypeDef crafting = DefDatabase<WorkTypeDef>.GetNamedSilentFail("Crafting");
-            var benchesByWorkType = new Dictionary<WorkTypeDef, List<ThingDef>>();
+            PawnCapacityDef manipulation = DefDatabase<PawnCapacityDef>.GetNamedSilentFail("Manipulation");
 
+            int registered = 0;
             foreach (ThingDef bench in orphanBenches)
             {
                 if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
@@ -617,33 +618,24 @@ namespace RRRR
                 if (workType == null)
                     continue;
 
-                if (!benchesByWorkType.TryGetValue(workType, out List<ThingDef> benches))
-                    benchesByWorkType[workType] = benches = new List<ThingDef>();
-                benches.Add(bench);
-            }
-
-            int registered = 0;
-            foreach (KeyValuePair<WorkTypeDef, List<ThingDef>> kvp in benchesByWorkType)
-            {
-                WorkTypeDef workType = kvp.Key;
-                string defName = $"RRRR_UnifiedBillFallback_{workType.defName}";
+                string safeName = bench.defName.Replace(" ", "_");
+                string defName = $"RRRR_UnifiedBillFallback_{safeName}";
                 WorkGiverDef wg = DefDatabase<WorkGiverDef>.GetNamedSilentFail(defName);
                 if (wg == null)
                 {
                     wg = new WorkGiverDef
                     {
                         defName = defName,
-                        label = "do R4 bills at orphan workbenches",
+                        label = "do R4 bills at orphan workbench",
                         giverClass = typeof(WorkGiver_R4UnifiedBill),
                         workType = workType,
                         priorityInType = 52,
-                        fixedBillGiverDefs = new List<ThingDef>(),
+                        fixedBillGiverDefs = new List<ThingDef> { bench },
                         verb = "work at",
-                        gerund = "doing R4 bills at orphan workbenches",
+                        gerund = "doing R4 bills at orphan workbench",
                         prioritizeSustains = true,
                     };
 
-                    var manipulation = DefDatabase<PawnCapacityDef>.GetNamedSilentFail("Manipulation");
                     if (manipulation != null)
                         wg.requiredCapacities = new List<PawnCapacityDef> { manipulation };
 
@@ -657,13 +649,9 @@ namespace RRRR
                     wg.fixedBillGiverDefs = new List<ThingDef>();
                 }
 
-                for (int i = 0; i < kvp.Value.Count; i++)
-                {
-                    ThingDef bench = kvp.Value[i];
-                    if (!wg.fixedBillGiverDefs.Contains(bench))
-                        wg.fixedBillGiverDefs.Add(bench);
-                    ValidateInjectedWorkGiverDef(bench, wg);
-                }
+                if (!wg.fixedBillGiverDefs.Contains(bench))
+                    wg.fixedBillGiverDefs.Add(bench);
+                ValidateInjectedWorkGiverDef(bench, wg);
 
                 RegisterDynamicWorkGiver(workType, wg);
             }

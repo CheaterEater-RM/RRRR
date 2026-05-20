@@ -17,10 +17,14 @@ namespace RRRR
         static void Postfix(
             WorkGiver_DoBill __instance,
             ref Job __result,
+            bool __runOriginal,
             Pawn pawn,
             Thing thing,
             bool forced)
         {
+            if (!__runOriginal || RRRR_Mod.Settings?.enableBillOrderingPostfix == false)
+                return;
+
             if (!(thing is IBillGiver billGiver) ||
                 !R4BillJobFactory.HasAnyR4RepairOrCleanBill(billGiver))
             {
@@ -48,6 +52,10 @@ namespace RRRR
             else if (!R4BillJobFactory.PassesVanillaBenchPrechecks(__instance, pawn, thing, forced))
             {
                 return;
+            }
+            else
+            {
+                billGiver.BillStack.RemoveIncompletableBills();
             }
 
             Job r4Job = R4BillJobFactory.TryDispatchAboveIndex(

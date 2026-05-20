@@ -8,12 +8,16 @@ namespace RRRR
     [StaticConstructorOnStartup]
     public static class RRRR_Init
     {
+        private const int AuthoredAgainstRimWorldMajor = 1;
+        private const int AuthoredAgainstRimWorldMinor = 6;
+
         static RRRR_Init()
         {
             var harmony = new Harmony("com.cheatereater.rrrr");
             harmony.PatchAll();
 
             BISCompat.Initialize();
+            WarnIfRimWorldVersionDiffers();
 
             // Verify required defs — errors are always shown regardless of debug setting
             VerifyDef<DesignationDef>("R4_Recycle");
@@ -40,6 +44,19 @@ namespace RRRR
             VerifyDef<RecipeDef>("RRRR_Clean_Fabrication");
 
             RuntimeHelpers.RunClassConstructor(typeof(R4WorkbenchFilterCache).TypeHandle);
+        }
+
+        private static void WarnIfRimWorldVersionDiffers()
+        {
+            if (VersionControl.CurrentMajor == AuthoredAgainstRimWorldMajor &&
+                VersionControl.CurrentMinor == AuthoredAgainstRimWorldMinor)
+            {
+                return;
+            }
+
+            R4Log.Warn(
+                $"R4 bill ordering was authored against RimWorld {AuthoredAgainstRimWorldMajor}.{AuthoredAgainstRimWorldMinor}; " +
+                $"current RimWorld is {VersionControl.CurrentVersionStringWithoutBuild}. Re-check vanilla WorkGiver_DoBill parity.");
         }
 
         private static void VerifyDef<T>(string defName) where T : Def

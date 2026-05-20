@@ -36,7 +36,7 @@ namespace RRRR
         {
             return recipe?.workerClass != null &&
                    workerType != null &&
-                   workerType.IsAssignableFrom(recipe.workerClass);
+                   recipe.workerClass == workerType;
         }
 
         public static bool HasAnyR4RepairOrCleanBill(IBillGiver billGiver)
@@ -421,6 +421,11 @@ namespace RRRR
                         continue;
                     if (!operationPredicate(thing))
                         continue;
+                    if (!ReachabilityWithinRegion.ThingFromRegionListerReachable(
+                            thing, region, PathEndMode.ClosestTouch, pawn))
+                    {
+                        continue;
+                    }
 
                     candidates.Add(thing);
                 }
