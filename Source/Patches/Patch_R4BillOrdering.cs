@@ -71,9 +71,9 @@ namespace RRRR
             ref Job __result,
             MethodBase __originalMethod,
             bool __runOriginal,
-            Pawn pawn,
-            Thing thing,
-            bool forced)
+            [HarmonyArgument(0)] Pawn pawn,
+            [HarmonyArgument(1)] Thing thing,
+            [HarmonyArgument(2)] bool forced)
         {
             if (RRRR_Mod.Settings?.enableBillOrderingPostfix == false)
                 return;
