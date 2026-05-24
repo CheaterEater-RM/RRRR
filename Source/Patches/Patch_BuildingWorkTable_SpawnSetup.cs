@@ -49,6 +49,22 @@ namespace RRRR
                     R4Log.Debug($"Removing stale bill '{bill.recipe.defName}' " +
                                 $"from {__instance.def.defName} (recipe no longer available on this bench).");
                     stack.Delete(bill);
+                    continue;
+                }
+
+                if (bill is Bill_Production production &&
+                    R4BillJobFactory.IsR4RepairOrClean(production.recipe) &&
+                    production.repeatMode == BillRepeatModeDefOf.TargetCount &&
+                    (production.recipe.WorkerCounter == null ||
+                     !production.recipe.WorkerCounter.CanCountProducts(production)))
+                {
+                    production.repeatMode = BillRepeatModeDefOf.RepeatCount;
+                    if (production.repeatCount < 1)
+                        production.repeatCount = 1;
+                    production.paused = false;
+
+                    R4Log.Debug($"Reset invalid target-count R4 bill '{production.recipe.defName}' " +
+                                $"on {__instance.def.defName} to repeat count mode.");
                 }
             }
         }

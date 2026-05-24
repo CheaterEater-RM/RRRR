@@ -21,6 +21,12 @@ namespace RRRR
         /// <summary>If true, verbose [R4] debug messages are written to the log.</summary>
         public bool debugLogging = false;
 
+        /// <summary>
+        /// Compatibility escape hatch for R4's DoBill postfix. Prefix-replaced
+        /// DoBill calls only participate when they return a concrete bill job.
+        /// </summary>
+        public bool enableBillOrderingPostfix = true;
+
         // ── Recycle ───────────────────────────────────────────────────────────
         /// <summary>Scalar applied to all recycled material yields. 1.0 = default.</summary>
         public float recycleGlobalMult = 1.0f;
@@ -81,6 +87,7 @@ namespace RRRR
             Scribe_Values.Look(ref repairHpPerCycle,        "repairHpPerCycle",        0.20f);
             Scribe_Values.Look(ref minorMendingThreshold,   "minorMendingThreshold",   0.95f);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
+            Scribe_Values.Look(ref enableBillOrderingPostfix, "enableBillOrderingPostfix", true);
         }
 
         public void ResetToDefaults()
@@ -91,6 +98,7 @@ namespace RRRR
             repairHpPerCycle        = 0.20f;
             minorMendingThreshold   = 0.95f;
             cleanCostFraction       = 0.20f;
+            enableBillOrderingPostfix = true;
         }
 
         public bool HasSameValuesAs(RRRR_Settings other)
@@ -103,7 +111,8 @@ namespace RRRR
                 && skipIntricateComponents == other.skipIntricateComponents
                 && Mathf.Approximately(repairHpPerCycle, other.repairHpPerCycle)
                 && Mathf.Approximately(minorMendingThreshold, other.minorMendingThreshold)
-                && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction);
+                && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction)
+                && enableBillOrderingPostfix == other.enableBillOrderingPostfix;
         }
 
         public RRRR_Settings Snapshot()
@@ -116,6 +125,7 @@ namespace RRRR
                 repairHpPerCycle = repairHpPerCycle,
                 minorMendingThreshold = minorMendingThreshold,
                 cleanCostFraction = cleanCostFraction,
+                enableBillOrderingPostfix = enableBillOrderingPostfix,
             };
         }
     }
@@ -196,6 +206,16 @@ namespace RRRR
             listing.Gap();
 
             // ── Debug ─────────────────────────────────────────────────────────
+            listing.Label("R4_Settings_CompatibilityHeader".Translate());
+            listing.GapLine();
+
+            listing.CheckboxLabeled(
+                "R4_Settings_EnableBillOrderingPostfix".Translate(),
+                ref Settings.enableBillOrderingPostfix,
+                "R4_Settings_EnableBillOrderingPostfix_Tip".Translate());
+
+            listing.Gap();
+
             listing.Label("R4_Settings_DebugHeader".Translate());
             listing.GapLine();
 

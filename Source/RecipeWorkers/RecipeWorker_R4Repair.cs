@@ -6,9 +6,9 @@ namespace RRRR
 {
     /// <summary>
     /// RecipeWorker for bill-based repair. The damaged item is the "ingredient",
-    /// but actual repair logic is handled entirely by WorkGiver_R4RepairBill +
-    /// JobDriver_R4Repair. This worker only prevents vanilla ingredient
-    /// destruction if the item ever flows through recipe code paths.
+    /// but actual repair logic is handled by R4BillJobFactory + JobDriver_R4Repair.
+    /// This worker only prevents vanilla ingredient destruction if the item ever
+    /// flows through recipe code paths.
     /// </summary>
     public class RecipeWorker_R4Repair : RecipeWorker
     {

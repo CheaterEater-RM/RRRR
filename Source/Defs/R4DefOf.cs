@@ -18,6 +18,8 @@ namespace RRRR
         public static JobDef RRRR_Repair;
         public static JobDef RRRR_Clean;
 
+        public static WorkTypeDef RRRR_BillOnly;
+
         static R4DefOf()
         {
             DefOfHelper.EnsureInitializedInCtor(typeof(R4DefOf));

@@ -25,9 +25,9 @@ namespace RRRR
     ///
     /// New workbench detection:
     ///   After the cache is built, benches in BenchCraftables are checked for
-    ///   missing R4 recipe coverage and missing custom bill WorkGivers. This lets
-    ///   modded benches inherit existing R4 recipes (for example via VEF) while
-    ///   still receiving the repair/clean bill WorkGivers those recipes require.
+    ///   missing R4 recipe coverage. Repair/clean dispatch normally rides on
+    ///   the WorkGiver_DoBill postfix; benches with no patched DoBill path and
+    ///   no competing fixed-bench scanner get a unified fallback WorkGiver.
     ///
     /// The approach relies on two sources of bench-item relationships:
     ///   1. item.recipeMaker.recipeUsers  — items listing their benches (primary)
@@ -49,6 +49,26 @@ namespace RRRR
         /// <summary>bench ThingDef → canonical WorkTypeDef servicing it.</summary>
         public static readonly Dictionary<ThingDef, WorkTypeDef> BenchWorkTypes
             = new Dictionary<ThingDef, WorkTypeDef>();
+
+        /// <summary>
+        /// Bench ThingDefs whose effective DoBill JobOnThing implementation is
+        /// patched by Patch_R4BillOrdering (base WorkGiver_DoBill or a loaded
+        /// override on a WorkGiver_DoBill subclass).
+        /// </summary>
+        public static readonly HashSet<ThingDef> PatchedDoBillBenches
+            = new HashSet<ThingDef>();
+
+        /// <summary>
+        /// Benches claimed by a fixed-bench scanner that is not serviced by the
+        /// DoBill ordering postfix. Injecting a separate R4 fallback scanner on
+        /// these benches would reintroduce cross-workgiver ordering.
+        /// </summary>
+        public static readonly HashSet<ThingDef> NonDoBillScannerBenches
+            = new HashSet<ThingDef>();
+
+        /// <summary>Diagnostic source WorkGiverDefs for NonDoBillScannerBenches.</summary>
+        public static readonly Dictionary<ThingDef, List<string>> NonDoBillScannerWorkGivers
+            = new Dictionary<ThingDef, List<string>>();
 
         /// <summary>
         /// Vanilla benches whose catch-all predicates are evaluated by
@@ -83,6 +103,9 @@ namespace RRRR
         {
             BenchCraftables.Clear();
             BenchWorkTypes.Clear();
+            PatchedDoBillBenches.Clear();
+            NonDoBillScannerBenches.Clear();
+            NonDoBillScannerWorkGivers.Clear();
             OrderedCatchAllBenches.Clear();
             ExplicitlyExcludedItems.Clear();
             WorkbenchRouter.Reset();
@@ -156,31 +179,59 @@ namespace RRRR
 
         static void BuildBenchWorkTypes()
         {
-            var vanillaType = typeof(WorkGiver_DoBill);
+            var doBillType = typeof(WorkGiver_DoBill);
+            var scannerType = typeof(WorkGiver_Scanner);
 
-            // Pass 1: vanilla WorkGiver_DoBill only (priority)
+            // Pass 1: benches whose effective DoBill JobOnThing path is patched.
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
-                if (wg.giverClass != vanillaType) continue;
+                if (wg.giverClass == null || !doBillType.IsAssignableFrom(wg.giverClass)) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
+                if (!Patch_R4BillOrdering.SupportsWorkGiver(wg.giverClass)) continue;
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
+                {
+                    PatchedDoBillBenches.Add(bench);
                     if (!BenchWorkTypes.ContainsKey(bench))
                         BenchWorkTypes[bench] = wg.workType;
+                }
             }
 
-            // Pass 2: modded WorkGivers — fill gaps only
+            // Pass 2: other fixed-bench workgivers. Fill work-type gaps and mark
+            // non-DoBill scanners so we don't add a competing fallback scanner.
             foreach (WorkGiverDef wg in DefDatabase<WorkGiverDef>.AllDefsListForReading)
             {
-                if (wg.giverClass == vanillaType) continue;
+                if (wg.giverClass != null && doBillType.IsAssignableFrom(wg.giverClass)) continue;
                 if (wg.fixedBillGiverDefs == null || wg.fixedBillGiverDefs.Count == 0) continue;
                 if (wg.workType == null) continue;
+
                 foreach (ThingDef bench in wg.fixedBillGiverDefs)
+                {
+                    if (wg.giverClass != null && scannerType.IsAssignableFrom(wg.giverClass))
+                    {
+                        NonDoBillScannerBenches.Add(bench);
+                        AddNonDoBillScannerWorkGiver(bench, wg);
+                    }
+
                     if (!BenchWorkTypes.ContainsKey(bench))
                         BenchWorkTypes[bench] = wg.workType;
+                }
             }
 
             R4Log.Debug($"BenchWorkTypes: {BenchWorkTypes.Count} benches mapped.");
+        }
+
+        static void AddNonDoBillScannerWorkGiver(ThingDef bench, WorkGiverDef workGiver)
+        {
+            if (bench == null || workGiver == null)
+                return;
+
+            if (!NonDoBillScannerWorkGivers.TryGetValue(bench, out List<string> workGivers))
+                NonDoBillScannerWorkGivers[bench] = workGivers = new List<string>();
+
+            string name = workGiver.defName ?? workGiver.giverClass?.FullName ?? "unknown";
+            if (!workGivers.Contains(name))
+                workGivers.Add(name);
         }
 
         static void ExpandVEFInheritedBenches()
@@ -419,8 +470,10 @@ namespace RRRR
 
         /// <summary>
         /// For any bench in BenchCraftables, ensure the full R4 bill surface is
-        /// present: repair/recycle recipes, clean when apparel is relevant, and the
-        /// custom repair/clean bill WorkGivers required by the non-vanilla paths.
+        /// present: repair/recycle recipes and clean when apparel is relevant.
+        /// Repair/clean bills are normally dispatched by the WorkGiver_DoBill
+        /// postfix. Benches with no patched DoBill path and no competing
+        /// fixed-bench scanner are registered with a unified fallback WorkGiver.
         ///
         /// This means mods adding new weapon/apparel workbenches automatically
         /// get R4 bill support without requiring explicit compatibility patches.
@@ -430,18 +483,18 @@ namespace RRRR
             var repairRecipeBenches = new HashSet<ThingDef>();
             var recycleRecipeBenches = new HashSet<ThingDef>();
             var cleanRecipeBenches = new HashSet<ThingDef>();
-            var repairBillWorkGiverBenches = new HashSet<ThingDef>();
-            var cleanBillWorkGiverBenches = new HashSet<ThingDef>();
+            var orphanFallbackBenches = new HashSet<ThingDef>();
+            var unsupportedScannerBenchReports = new List<string>();
             var skippedBenches = new List<string>();
 
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
                 HashSet<ThingDef> coveredBenches = null;
-                if (recipe.workerClass == typeof(RecipeWorker_R4Repair))
+                if (R4BillJobFactory.IsRecipeWorker(recipe, typeof(RecipeWorker_R4Repair)))
                     coveredBenches = repairRecipeBenches;
-                else if (recipe.workerClass == typeof(RecipeWorker_R4Recycle))
+                else if (R4BillJobFactory.IsRecipeWorker(recipe, typeof(RecipeWorker_R4Recycle)))
                     coveredBenches = recycleRecipeBenches;
-                else if (recipe.workerClass == typeof(RecipeWorker_R4Clean))
+                else if (R4BillJobFactory.IsRecipeWorker(recipe, typeof(RecipeWorker_R4Clean)))
                     coveredBenches = cleanRecipeBenches;
 
                 if (coveredBenches == null)
@@ -449,24 +502,6 @@ namespace RRRR
 
                 foreach (ThingDef bench in AllRecipeUsers(recipe))
                     coveredBenches.Add(bench);
-            }
-
-            foreach (WorkGiverDef workGiver in DefDatabase<WorkGiverDef>.AllDefsListForReading)
-            {
-                if (workGiver.fixedBillGiverDefs == null || workGiver.fixedBillGiverDefs.Count == 0)
-                    continue;
-
-                HashSet<ThingDef> coveredBenches = null;
-                if (workGiver.giverClass == typeof(WorkGiver_R4RepairBill))
-                    coveredBenches = repairBillWorkGiverBenches;
-                else if (workGiver.giverClass == typeof(WorkGiver_R4CleanBill))
-                    coveredBenches = cleanBillWorkGiverBenches;
-
-                if (coveredBenches == null)
-                    continue;
-
-                for (int i = 0; i < workGiver.fixedBillGiverDefs.Count; i++)
-                    coveredBenches.Add(workGiver.fixedBillGiverDefs[i]);
             }
 
             // Find template RecipeDefs to clone
@@ -499,6 +534,14 @@ namespace RRRR
                 if (bench.recipes == null)
                     bench.recipes = new List<RecipeDef>();
 
+                bool hasPatchedDoBill = PatchedDoBillBenches.Contains(bench);
+                bool hasCompetingScanner = NonDoBillScannerBenches.Contains(bench);
+                if (!hasPatchedDoBill && hasCompetingScanner)
+                {
+                    unsupportedScannerBenchReports.Add(DescribeNonDoBillScannerBench(bench));
+                    continue;
+                }
+
                 bool hasClean = kvp.Value.Any(IsCleanEligible);
                 string safeName = bench.defName.Replace(" ", "_");
                 bool changed = false;
@@ -506,8 +549,6 @@ namespace RRRR
                 RecipeDef repairRecipe = null;
                 RecipeDef recycleRecipe = null;
                 RecipeDef cleanRecipe = null;
-                WorkGiverDef repairWorkGiver = null;
-                WorkGiverDef cleanWorkGiver = null;
 
                 if (!repairRecipeBenches.Contains(bench))
                 {
@@ -530,29 +571,12 @@ namespace RRRR
                     changed = true;
                 }
 
-                // Recycle intentionally stays on the bench's existing DoBill-compatible
-                // WorkGiver. Only repair and clean need custom bill WorkGivers because
-                // they bypass vanilla's normal bill execution path.
-                // Inject custom WorkGiverDefs for the bill pipeline where needed.
-                if (!repairBillWorkGiverBenches.Contains(bench))
-                {
-                    repairWorkGiver = InjectRepairBillWorkGiver(bench, safeName);
-                    repairBillWorkGiverBenches.Add(bench);
-                    changed = true;
-                }
-
-                if (hasClean && !cleanBillWorkGiverBenches.Contains(bench))
-                {
-                    cleanWorkGiver = InjectCleanBillWorkGiver(bench, safeName);
-                    cleanBillWorkGiverBenches.Add(bench);
-                    changed = true;
-                }
+                if (!hasPatchedDoBill)
+                    orphanFallbackBenches.Add(bench);
 
                 ValidateInjectedRecipeDef(bench, repairRecipe);
                 ValidateInjectedRecipeDef(bench, recycleRecipe);
                 ValidateInjectedRecipeDef(bench, cleanRecipe);
-                ValidateInjectedWorkGiverDef(bench, repairWorkGiver);
-                ValidateInjectedWorkGiverDef(bench, cleanWorkGiver);
 
                 if (!changed)
                     continue;
@@ -564,6 +588,24 @@ namespace RRRR
             if (touchedBenches > 0)
                 R4Log.Debug($"Ensured R4 bill coverage on {touchedBenches} modded bench(es).");
 
+            int fallbackDefs = InjectUnifiedBillFallbacks(orphanFallbackBenches);
+            if (fallbackDefs > 0)
+            {
+                R4Log.Warn(
+                    $"Registered R4 unified bill fallback for {orphanFallbackBenches.Count} orphan bench(es) with {fallbackDefs} per-bench scanner(s).");
+            }
+
+            if (unsupportedScannerBenchReports.Count > 0)
+            {
+                string preview = string.Join(", ", unsupportedScannerBenchReports.Take(10));
+                if (unsupportedScannerBenchReports.Count > 10)
+                    preview += ", ...";
+
+                R4Log.Warn(
+                    $"Skipped dynamic R4 bill injection on {unsupportedScannerBenchReports.Count} bench(es) with non-DoBill fixed scanners. " +
+                    $"Adding an R4 fallback scanner there would break stack ordering without a dedicated compat patch: {preview}");
+            }
+
             if (skippedBenches.Count > 0)
             {
                 string preview = string.Join(", ", skippedBenches.Take(10));
@@ -573,6 +615,19 @@ namespace RRRR
                 R4Log.Warn(
                     $"Skipped dynamic R4 bill injection on {skippedBenches.Count} bench(es) that do not satisfy Building_WorkTable + ITab_Bills prerequisites: {preview}");
             }
+        }
+
+        static string DescribeNonDoBillScannerBench(ThingDef bench)
+        {
+            string benchName = bench?.defName ?? "null";
+            if (bench != null &&
+                NonDoBillScannerWorkGivers.TryGetValue(bench, out List<string> workGivers) &&
+                workGivers.Count > 0)
+            {
+                return $"{benchName} via {string.Join("/", workGivers)}";
+            }
+
+            return benchName;
         }
 
         static RecipeDef InjectRecipeDef(RecipeDef template, string defName, ThingDef bench, List<RecipeDef> benchRecipes)
@@ -623,65 +678,61 @@ namespace RRRR
             return recipe;
         }
 
-        static WorkGiverDef InjectRepairBillWorkGiver(ThingDef bench, string safeName)
+        static int InjectUnifiedBillFallbacks(HashSet<ThingDef> orphanBenches)
         {
-            // Determine work type from our cache, fall back to Crafting
-            if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
-                workType = DefDatabase<WorkTypeDef>.GetNamedSilentFail("Crafting");
+            if (orphanBenches == null || orphanBenches.Count == 0)
+                return 0;
 
-            var wg = new WorkGiverDef
+            WorkTypeDef crafting = DefDatabase<WorkTypeDef>.GetNamedSilentFail("Crafting");
+            PawnCapacityDef manipulation = DefDatabase<PawnCapacityDef>.GetNamedSilentFail("Manipulation");
+
+            int registered = 0;
+            foreach (ThingDef bench in orphanBenches)
             {
-                defName            = $"RRRR_RepairBill_Mod_{safeName}",
-                label              = $"repair items at {bench.label}",
-                giverClass         = typeof(WorkGiver_R4RepairBill),
-                workType           = workType,
-                priorityInType     = 52,
-                fixedBillGiverDefs = new List<ThingDef> { bench },
-                verb               = "repair at",
-                gerund             = $"repairing items at {bench.label}",
-                prioritizeSustains = true,
-            };
+                if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
+                    workType = crafting;
+                if (workType == null)
+                    continue;
 
-            // Only add Manipulation if the def exists — GetNamedSilentFail can return null
-            // in unusual modded environments, and a null entry would cause NREs at runtime.
-            var manipulation = DefDatabase<PawnCapacityDef>.GetNamedSilentFail("Manipulation");
-            if (manipulation != null)
-                wg.requiredCapacities = new List<PawnCapacityDef> { manipulation };
+                string safeName = bench.defName.Replace(" ", "_");
+                string defName = $"RRRR_UnifiedBillFallback_{safeName}";
+                WorkGiverDef wg = DefDatabase<WorkGiverDef>.GetNamedSilentFail(defName);
+                if (wg == null)
+                {
+                    wg = new WorkGiverDef
+                    {
+                        defName = defName,
+                        label = "do R4 bills at orphan workbench",
+                        giverClass = typeof(WorkGiver_R4UnifiedBill),
+                        workType = workType,
+                        priorityInType = 52,
+                        fixedBillGiverDefs = new List<ThingDef> { bench },
+                        verb = "work at",
+                        gerund = "doing R4 bills at orphan workbench",
+                        prioritizeSustains = true,
+                    };
 
-            wg.ResolveDefNameHash();
-            DefDatabase<WorkGiverDef>.Add(wg);
-            wg.ResolveReferences();
-            RegisterDynamicWorkGiver(workType, wg);
-            return wg;
-        }
+                    if (manipulation != null)
+                        wg.requiredCapacities = new List<PawnCapacityDef> { manipulation };
 
-        static WorkGiverDef InjectCleanBillWorkGiver(ThingDef bench, string safeName)
-        {
-            if (!BenchWorkTypes.TryGetValue(bench, out WorkTypeDef workType) || workType == null)
-                workType = DefDatabase<WorkTypeDef>.GetNamedSilentFail("Crafting");
+                    wg.ResolveDefNameHash();
+                    DefDatabase<WorkGiverDef>.Add(wg);
+                    wg.ResolveReferences();
+                    registered++;
+                }
+                else if (wg.fixedBillGiverDefs == null)
+                {
+                    wg.fixedBillGiverDefs = new List<ThingDef>();
+                }
 
-            var wg = new WorkGiverDef
-            {
-                defName            = $"RRRR_CleanBill_Mod_{safeName}",
-                label              = $"clean apparel at {bench.label}",
-                giverClass         = typeof(WorkGiver_R4CleanBill),
-                workType           = workType,
-                priorityInType     = 47,
-                fixedBillGiverDefs = new List<ThingDef> { bench },
-                verb               = "clean at",
-                gerund             = $"cleaning apparel at {bench.label}",
-                prioritizeSustains = true,
-            };
+                if (!wg.fixedBillGiverDefs.Contains(bench))
+                    wg.fixedBillGiverDefs.Add(bench);
+                ValidateInjectedWorkGiverDef(bench, wg);
 
-            var manipulation = DefDatabase<PawnCapacityDef>.GetNamedSilentFail("Manipulation");
-            if (manipulation != null)
-                wg.requiredCapacities = new List<PawnCapacityDef> { manipulation };
+                RegisterDynamicWorkGiver(workType, wg);
+            }
 
-            wg.ResolveDefNameHash();
-            DefDatabase<WorkGiverDef>.Add(wg);
-            wg.ResolveReferences();
-            RegisterDynamicWorkGiver(workType, wg);
-            return wg;
+            return registered;
         }
 
         static void RegisterDynamicWorkGiver(WorkTypeDef workType, WorkGiverDef workGiver)
@@ -777,7 +828,7 @@ namespace RRRR
             }
             catch (Exception ex)
             {
-                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName}: {ex}");
+                R4Log.Warn($"Injected WorkGiver validation failed for {workGiver.defName} ({workGiver.giverClass?.Name ?? "null"}): {ex}");
             }
         }
 
@@ -791,9 +842,10 @@ namespace RRRR
 
             foreach (RecipeDef recipe in DefDatabase<RecipeDef>.AllDefsListForReading)
             {
-                if (recipe.workerClass != repairType  &&
-                    recipe.workerClass != recycleType &&
-                    recipe.workerClass != cleanType) continue;
+                bool isRepair = R4BillJobFactory.IsRecipeWorker(recipe, repairType);
+                bool isRecycle = R4BillJobFactory.IsRecipeWorker(recipe, recycleType);
+                bool isClean = R4BillJobFactory.IsRecipeWorker(recipe, cleanType);
+                if (!isRepair && !isRecycle && !isClean) continue;
 
                 var allowed = new HashSet<ThingDef>();
                 foreach (ThingDef bench in AllRecipeUsers(recipe))
@@ -802,9 +854,9 @@ namespace RRRR
                         allowed.UnionWith(craftables);
                 }
 
-                if (recipe.workerClass == repairType)
+                if (isRepair)
                     allowed.RemoveWhere(d => !IsRepairEligible(d));
-                else if (recipe.workerClass == recycleType)
+                else if (isRecycle)
                     allowed.RemoveWhere(d => !IsRecycleEligible(d));
                 else
                     allowed.RemoveWhere(d => !IsCleanEligible(d));

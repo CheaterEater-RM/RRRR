@@ -26,8 +26,8 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `WorkGiver_R4Recycle` | Designation-based: scans for designated items, creates recycle jobs (per work type) |
 | `WorkGiver_R4Repair` | Designation-based: scans for items needing repair, creates repair jobs |
 | `WorkGiver_R4Clean` | Designation-based: scans for tainted apparel, creates clean jobs |
-| `WorkGiver_R4RepairBill` | Bill-based: custom WorkGiver for repair bills with material hauling; clears stale bench ingredients, removes incompletable bills, memoizes same-tick scans, and preserves the bench target with `haulMode = ToCellNonStorage` |
-| `WorkGiver_R4CleanBill` | Bill-based: custom WorkGiver for clean bills with material hauling; clears stale bench ingredients, removes incompletable bills, memoizes same-tick scans, and preserves the bench target with `haulMode = ToCellNonStorage` |
+| `R4BillJobFactory` | Bill-based: shared repair/clean dispatch used by the vanilla DoBill postfix and orphan-bench fallback |
+| `WorkGiver_R4UnifiedBill` | Bill-based: fallback scanner for modded benches with no patched DoBill path and no competing fixed-bench scanner |
 | `JobDriver_R4WorkBase` | Shared base class for Repair and Clean job drivers; centralizes work toil timing, fail conditions, and ingredient handling |
 | `RecipeWorker_R4Recycle` | Bill-based: defers item destruction, skill-based product calculation |
 | `RecipeWorker_R4Repair` | Bill-based: prevents bill ingredient destruction; actual repair logic runs in `JobDriver_R4Repair` |
@@ -51,7 +51,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `Thing.GetGizmos` | Postfix | Inject per-item R4 gizmo buttons (recycle, repair, clean) with rich tooltips |
 | `Building_WorkTable.SpawnSetup` | Postfix | Strip stale bills (e.g. vanilla SmeltWeapon) on load/placement for save compat |
 | `Toils_Haul.PlaceHauledThingInCell` | Postfix | Track placed ingredient stacks for R4 repair/clean jobs via `job.placedThings` and enable correct ingredient consumption |
-| `WorkGiver_DoBill.JobOnThing` | Postfix | Null out R4 repair and clean jobs so vanilla bill search cannot run in parallel with the custom R4 bill WorkGivers |
+| `WorkGiver_DoBill.JobOnThing` (+ loaded overrides) | Postfix | Preserve vanilla/recycle bill selection, then substitute the first runnable R4 repair/clean bill above the selected bill |
 
 ### Designation Flow
 
@@ -63,7 +63,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 **Gizmo (direct select):** Select item → click gizmo → gizmo places designation → same WorkGiver flow. Gizmos injected via `Thing.GetGizmos` Harmony postfix. Rich tooltips show bench routing, material costs, and success chance estimates (at skill 10).
 
-**Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle uses vanilla's `WorkGiver_DoBill` pipeline. Repair and Clean use custom `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` because the worked item and dynamic material costs need to be handled together. A Harmony postfix on `WorkGiver_DoBill.JobOnThing` strips out R4 repair and clean jobs so vanilla bill search does not race the custom bill paths.
+**Bills (automated, M4):** Standing bills with custom `RecipeWorker` subclasses. Recycle uses vanilla's `WorkGiver_DoBill` pipeline. Repair and Clean use `requiredGiverWorkType=RRRR_BillOnly` so vanilla skips them, then `Patch_R4BillOrdering` substitutes custom R4 jobs when a repair/clean bill sits above the chosen vanilla or modded DoBill bill. If a custom DoBill override returns no job, R4 does not run its vanilla null-result fallback, because that null may be a custom veto. True orphan modded benches use `WorkGiver_R4UnifiedBill`; benches that already have a non-DoBill fixed scanner are skipped until they get a dedicated compatibility path, because adding an R4 fallback scanner there would reintroduce cross-workgiver bill ordering.
 
 **Bench staging:** Ingredient hauling for R4 repair/clean uses the bench's `IngredientStackCells`, but the worked item itself must stage to a separate nearby cell that does not reuse tracked ingredient stacks. Reusing `IngredientStackCells` for the worked item can invalidate `job.placedThings` before the work toil starts.
 
@@ -71,7 +71,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 
 Each designation action (recycle, repair, clean) is registered under **three WorkGiverDefs** — Crafting, Smithing, Tailoring — so the work tab column matches the bench type. The shared `WorkGiver_R4DesignationBase.FindBench` filters candidates to benches whose WorkTypeDef matches the WorkGiver's own `def.workType`.
 
-Bill-based repair and clean use per-bench `WorkGiver_R4RepairBill` / `WorkGiver_R4CleanBill` defs with `fixedBillGiverDefs`. Their recipes use `requiredGiverWorkType=Crafting` as defense-in-depth on non-Crafting benches, but the primary de-duplication fix is the Harmony postfix on `WorkGiver_DoBill.JobOnThing`, which removes R4 repair and clean jobs from the vanilla path. Repair and Clean bill WorkGivers also clear stale bill-giver ingredients before creating a new job, call `BillStack.RemoveIncompletableBills()` to match vanilla bill hygiene, memoize same-tick scanner results to avoid duplicate full searches across `HasJobOnThing` and `JobOnThing`, and set `job.haulMode = HaulMode.ToCellNonStorage` so the bench target remains stable throughout the custom bill pipeline.
+Bill-based repair and clean are ordered by a conservative `WorkGiver_DoBill.JobOnThing` postfix. The active DoBill implementation scans the bill stack first and owns all vanilla/recycle behaviour. R4 then checks only repair/clean bills above the selected bill and dispatches the first runnable custom job. If another mod cancels or replaces DoBill with a prefix, R4 can only order against a concrete bill job that mod returns; it never runs the null-result fallback after a prefix cancel. `R4BillJobFactory` clears stale bill-giver ingredients, calls `BillStack.RemoveIncompletableBills()`, memoizes same-tick dispatch, preserves BIS candidate filtering, and sets `job.haulMode = HaulMode.ToCellNonStorage` so the bench target remains stable throughout the custom bill pipeline.
 
 ### Workbench Routing
 
@@ -202,9 +202,9 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 
 ### Bill Pipeline
 - Recycle bills: vanilla `WorkGiver_DoBill` → `JobDriver_DoBill` → custom `RecipeWorker_R4Recycle`
-- Repair bills: custom `WorkGiver_R4RepairBill` → custom `JobDriver_R4Repair` (uses `JobDriver_DoBill.CollectIngredientsToils`)
-- Clean bills: custom `WorkGiver_R4CleanBill` → custom `JobDriver_R4Clean` (uses `JobDriver_DoBill.CollectIngredientsToils`)
-- Vanilla `WorkGiver_DoBill` is allowed to search normally but any resulting R4 repair or clean job is nulled out by Harmony so only the custom bill paths execute
+- Repair bills: `Patch_R4BillOrdering` / `WorkGiver_R4UnifiedBill` (true orphan benches only) → `R4BillJobFactory` → custom `JobDriver_R4Repair`
+- Clean bills: `Patch_R4BillOrdering` / `WorkGiver_R4UnifiedBill` (true orphan benches only) → `R4BillJobFactory` → custom `JobDriver_R4Clean`
+- Vanilla `WorkGiver_DoBill` is allowed to search normally but skips repair/clean via hidden `RRRR_BillOnly`; the postfix substitutes R4 jobs only when stack order says they should win
 - `RecipeWorker.ConsumeIngredient` overridden to prevent item destruction
 - `JobDriver_R4Repair` and `JobDriver_R4Clean` now inherit from `JobDriver_R4WorkBase`, aligning their work loop with vanilla `JobDriver_DoBill` and centralizing `tickAction`/`tickIntervalAction` semantics
 - `RecipeWorker.Notify_IterationCompleted` handles recycle/clean completion logic; repair completion is handled in `JobDriver_R4Repair`
@@ -275,3 +275,16 @@ RRRR\
   - the work item may still be shown at the bench for player feedback, but only in a dedicated display cell that is excluded from ingredient staging for that job
 
   This display cell should be derived from the bench at runtime rather than stored as new persistent state. On benches with multiple occupied cells, one deterministic bench cell can be reserved as the display surface and removed from ingredient placement candidates. On 1x1 benches, where no separate occupied cell exists or the occupied cell is not spawnable, the display position must fall back to a deterministic adjacent cell near the interaction point. The user-facing requirement is "visibly at the bench," not "always on an occupied bench tile," because the latter is not physically valid for every vanilla bench shape.
+
+  ### Pick Up And Haul Designation Persistence
+
+  R4's recycle, repair, and clean designations are attached directly to concrete `Thing` instances and the designation WorkGivers only scan spawned designations. Vanilla carry-tracker hauling preserves that model because `Pawn_CarryTracker` is not treated as an enclosing container, so adding an item to a pawn's hands does not strip designations. Pick Up And Haul is different: its inventory-haul path splits the target stack and adds the result to `Pawn_InventoryTracker`, and vanilla removes all designations from items added to enclosing containers.
+
+  The compatibility consequence is specific and reproducible: an R4-designated item that enters the PUaH inventory path loses its R4 designation before unload, so the later spawned item is no longer visible to `SpawnedDesignationsOfDef(...)`. PUaH's own code also documents that partially merged hauled stacks can acquire a different `ThingID` while in inventory, which makes any identity-based designation tracking across that path more fragile than normal hauling.
+
+  Preferred compatibility direction:
+
+  - do not try to keep live R4 designations attached to inventory-held items
+  - when Pick Up And Haul is active, divert R4-designated items away from PUaH's `HaulToInventory` job and back to vanilla `HaulToStorageJob` before the item enters `Pawn_InventoryTracker`
+  - implement this as a soft-dependency compat patch on the PUaH workgiver/job-creation path, not in R4's repair/recycle job drivers
+  - only broaden scope to already-queued PUaH haul jobs if a focused repro still exists after the workgiver-level redirect
