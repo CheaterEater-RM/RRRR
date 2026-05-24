@@ -22,8 +22,8 @@ namespace RRRR
         public bool debugLogging = false;
 
         /// <summary>
-        /// Compatibility escape hatch for mods that intentionally suppress
-        /// vanilla bill work. Default on; disable only to diagnose conflicts.
+        /// Compatibility escape hatch for R4's DoBill postfix. Prefix-replaced
+        /// DoBill calls only participate when they return a concrete bill job.
         /// </summary>
         public bool enableBillOrderingPostfix = true;
 

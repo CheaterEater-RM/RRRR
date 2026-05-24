@@ -6,8 +6,8 @@ namespace RRRR
 {
     /// <summary>
     /// Fallback bill scanner for modded benches that expose R4 bills but are
-    /// not claimed by any vanilla WorkGiver_DoBill. Normal benches use the
-    /// WorkGiver_DoBill postfix instead.
+    /// not covered by a patched DoBill path or another fixed-bench scanner.
+    /// Normal benches use the WorkGiver_DoBill postfix instead.
     /// </summary>
     public class WorkGiver_R4UnifiedBill : WorkGiver_Scanner
     {

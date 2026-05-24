@@ -75,7 +75,7 @@
 
   <R4_Settings_CompatibilityHeader>Compatibility</R4_Settings_CompatibilityHeader>
   <R4_Settings_EnableBillOrderingPostfix>Enable bill ordering compatibility patch</R4_Settings_EnableBillOrderingPostfix>
-  <R4_Settings_EnableBillOrderingPostfix_Tip>Lets R4 repair and clean bills participate in vanilla bill-stack order. Disable only if another mod intentionally blocks bench work and R4 still starts those bills.</R4_Settings_EnableBillOrderingPostfix_Tip>
+  <R4_Settings_EnableBillOrderingPostfix_Tip>Lets R4 repair and clean bills join DoBill bill-stack order. If another mod replaces DoBill, R4 can only order against a bill job that mod returns; if it returns no bill, R4 leaves the bench alone. Disable while testing bill-ordering conflicts.</R4_Settings_EnableBillOrderingPostfix_Tip>
 
   <R4_Settings_DebugHeader>Developer</R4_Settings_DebugHeader>
   <R4_Settings_DebugLogging>Enable debug logging</R4_Settings_DebugLogging>
