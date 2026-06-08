@@ -24,7 +24,9 @@ Known outliers that should never be treated as R4 gear can be excluded centrally
 
 ## Vanilla Smelting
 
-R4 replaces the vanilla SmeltWeapon and SmeltApparel recipes on the electric smelter with its own skill-based recycling bills. The Destroy recipes and ExtractMetalFromSlag are unaffected.
+By default R4 replaces the vanilla Smelt Weapon, Smelt Apparel, and Smelt Items recipes — on the electric smelter and any modded smelter — with its own skill-based recycling bills. The Destroy recipes and ExtractMetalFromSlag are unaffected.
+
+If you'd rather keep vanilla smelting, turn off **"Replace smelting with R⁴ recycling"** in the mod settings. This option only takes effect after restarting RimWorld.
 
 ## Save Safety
 

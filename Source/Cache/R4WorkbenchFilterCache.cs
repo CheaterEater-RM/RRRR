@@ -84,13 +84,35 @@ namespace RRRR
         private static readonly HashSet<ThingDef> ExplicitlyExcludedItems
             = new HashSet<ThingDef>();
 
+        /// <summary>
+        /// Benches whose <c>recipes</c> list RRRR mutated this build (smelter strip
+        /// or recipe injection). Their private ThingDef.allRecipesCached is nulled
+        /// at the end of Build so vanilla rebuilds AllRecipes fresh — otherwise a
+        /// list cached before our mutation (by another mod's static ctor or the UI)
+        /// would stay stale and the bills tab would show the wrong recipes.
+        /// </summary>
+        private static readonly HashSet<ThingDef> BenchesWithMutatedRecipes
+            = new HashSet<ThingDef>();
+
+        /// <summary>Reflective accessor for ThingDef's private allRecipesCached field.</summary>
+        private static readonly AccessTools.FieldRef<ThingDef, List<RecipeDef>> AllRecipesCachedRef
+            = AccessTools.FieldRefAccess<ThingDef, List<RecipeDef>>("allRecipesCached");
+
         // Vanilla smelter recipes we always strip from any bench that has them.
-        private static readonly HashSet<string> SmelterRecipesToStrip = new HashSet<string>
+        internal static readonly HashSet<string> SmelterRecipesToStrip = new HashSet<string>
         {
             "SmeltWeapon",
             "SmeltApparel",
             "SmeltOrDestroyThing",
         };
+
+        /// <summary>
+        /// True if the recipe is one of the smelter recipes RRRR strips from benches.
+        /// The SpawnSetup patch uses this to clean up leftover smelt bills on saved
+        /// benches, mirroring exactly what <see cref="StripSmelterRecipes"/> removes.
+        /// </summary>
+        internal static bool IsStrippedSmelterRecipe(RecipeDef recipe) =>
+            recipe != null && SmelterRecipesToStrip.Contains(recipe.defName);
 
         // ── Entry point ────────────────────────────────────────────────────────
 
@@ -108,10 +130,15 @@ namespace RRRR
             NonDoBillScannerWorkGivers.Clear();
             OrderedCatchAllBenches.Clear();
             ExplicitlyExcludedItems.Clear();
+            BenchesWithMutatedRecipes.Clear();
             WorkbenchRouter.Reset();
 
             BuildEligibilityExclusions();
-            StripSmelterRecipes();
+            // Frozen per-session value (see RRRR_Mod.StripSmelterBillsThisSession):
+            // stripping mutates ThingDef.recipes irreversibly, so a mid-session
+            // settings rebuild must not re-evaluate the live toggle.
+            if (RRRR_Mod.StripSmelterBillsThisSession)
+                StripSmelterRecipes();
             BuildBenchWorkTypes();
             ExpandVEFInheritedBenches();
             BuildFromRecipeMakers();
@@ -120,6 +147,7 @@ namespace RRRR
             UnionVEFAliasedBenchCraftables();
             InjectModdedBenchBills();
             PatchRecipeFilters();
+            InvalidateMutatedAllRecipesCaches();
             WorkbenchRouter.BuildFallbackCache();
 
             R4Log.Debug($"Cache built: {BenchCraftables.Count} benches, " +
@@ -165,6 +193,7 @@ namespace RRRR
                     if (SmelterRecipesToStrip.Contains(recipe.defName))
                     {
                         bench.recipes.RemoveAt(i);
+                        BenchesWithMutatedRecipes.Add(bench);
                         removed++;
                         R4Log.Debug($"Stripped {recipe.defName} from {bench.defName}");
                     }
@@ -173,6 +202,27 @@ namespace RRRR
 
             if (removed > 0)
                 R4Log.Debug($"Stripped {removed} smelter recipe(s) across all benches.");
+        }
+
+        // ── Invalidate vanilla's AllRecipes cache on mutated benches ──────────
+
+        /// <summary>
+        /// Nulls ThingDef.allRecipesCached on every bench whose recipes list we
+        /// changed, so vanilla's lazy AllRecipes getter rebuilds it from the
+        /// current recipes list (plus recipeUsers) on next access. Without this,
+        /// any bench whose AllRecipes was already materialised before our mutation
+        /// keeps a stale list — the bills tab would still offer stripped smelter
+        /// recipes and omit injected R4 recipes.
+        /// </summary>
+        static void InvalidateMutatedAllRecipesCaches()
+        {
+            if (BenchesWithMutatedRecipes.Count == 0)
+                return;
+
+            foreach (ThingDef bench in BenchesWithMutatedRecipes)
+                AllRecipesCachedRef(bench) = null;
+
+            R4Log.Debug($"Invalidated AllRecipes cache on {BenchesWithMutatedRecipes.Count} mutated bench(es).");
         }
 
         // ── Step 0: bench → WorkTypeDef map ───────────────────────────────────
@@ -673,7 +723,10 @@ namespace RRRR
 
             // Also add directly to the bench's recipes list
             if (benchRecipes != null && !benchRecipes.Contains(recipe))
+            {
                 benchRecipes.Add(recipe);
+                BenchesWithMutatedRecipes.Add(bench);
+            }
 
             return recipe;
         }

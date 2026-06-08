@@ -27,6 +27,14 @@ namespace RRRR
         /// </summary>
         public bool enableBillOrderingPostfix = true;
 
+        /// <summary>
+        /// If true (default), R4 strips vanilla smelting (SmeltWeapon/SmeltApparel/
+        /// SmeltOrDestroyThing) from benches and cleans up leftover smelt bills on
+        /// saved benches, replacing it with R4 recycling. Turn off to keep vanilla
+        /// smelting. Only takes effect after restarting RimWorld.
+        /// </summary>
+        public bool stripSmelterBills = true;
+
         // ── Recycle ───────────────────────────────────────────────────────────
         /// <summary>Scalar applied to all recycled material yields. 1.0 = default.</summary>
         public float recycleGlobalMult = 1.0f;
@@ -88,6 +96,7 @@ namespace RRRR
             Scribe_Values.Look(ref minorMendingThreshold,   "minorMendingThreshold",   0.95f);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
             Scribe_Values.Look(ref enableBillOrderingPostfix, "enableBillOrderingPostfix", true);
+            Scribe_Values.Look(ref stripSmelterBills,       "stripSmelterBills",       true);
         }
 
         public void ResetToDefaults()
@@ -99,6 +108,7 @@ namespace RRRR
             minorMendingThreshold   = 0.95f;
             cleanCostFraction       = 0.20f;
             enableBillOrderingPostfix = true;
+            stripSmelterBills       = true;
         }
 
         public bool HasSameValuesAs(RRRR_Settings other)
@@ -112,7 +122,8 @@ namespace RRRR
                 && Mathf.Approximately(repairHpPerCycle, other.repairHpPerCycle)
                 && Mathf.Approximately(minorMendingThreshold, other.minorMendingThreshold)
                 && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction)
-                && enableBillOrderingPostfix == other.enableBillOrderingPostfix;
+                && enableBillOrderingPostfix == other.enableBillOrderingPostfix
+                && stripSmelterBills == other.stripSmelterBills;
         }
 
         public RRRR_Settings Snapshot()
@@ -126,6 +137,7 @@ namespace RRRR
                 minorMendingThreshold = minorMendingThreshold,
                 cleanCostFraction = cleanCostFraction,
                 enableBillOrderingPostfix = enableBillOrderingPostfix,
+                stripSmelterBills = stripSmelterBills,
             };
         }
     }
@@ -137,11 +149,22 @@ namespace RRRR
     {
         public static RRRR_Settings Settings { get; private set; }
 
+        /// <summary>
+        /// Snapshot of <see cref="RRRR_Settings.stripSmelterBills"/> taken at game
+        /// launch. Smelter stripping mutates ThingDef.recipes irreversibly, so the
+        /// decision is frozen for the whole session — changing the setting only
+        /// takes effect on the next restart. Both the startup strip and the
+        /// SpawnSetup bill cleanup read this, never the live setting, so a
+        /// mid-session settings rebuild can't partially apply the toggle.
+        /// </summary>
+        public static bool StripSmelterBillsThisSession { get; private set; } = true;
+
         private RRRR_Settings _lastAppliedSettings;
 
         public RRRR_Mod(ModContentPack content) : base(content)
         {
             Settings = GetSettings<RRRR_Settings>();
+            StripSmelterBillsThisSession = Settings.stripSmelterBills;
             _lastAppliedSettings = Settings.Snapshot();
         }
 
@@ -213,6 +236,11 @@ namespace RRRR
                 "R4_Settings_EnableBillOrderingPostfix".Translate(),
                 ref Settings.enableBillOrderingPostfix,
                 "R4_Settings_EnableBillOrderingPostfix_Tip".Translate());
+
+            listing.CheckboxLabeled(
+                "R4_Settings_StripSmelterBills".Translate(),
+                ref Settings.stripSmelterBills,
+                "R4_Settings_StripSmelterBills_Tip".Translate());
 
             listing.Gap();
 

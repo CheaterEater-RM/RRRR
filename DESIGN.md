@@ -39,7 +39,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `MaterialUtility` | All material cost/return calculations, ingredient finding, sigmoid recycle curve |
 | `WorkbenchRouter` | Maps item → ordered list of valid workbench(es) via `recipeMaker.recipeUsers`, VEF bench aliases, and per-bench catch-all predicates; precomputed merged cache at startup |
 | `SkillUtility` | Tech difficulty, repair success checks, failure severity |
-| `R4WorkbenchFilterCache` | Startup cache: inverts recipeMaker.recipeUsers, builds per-bench filters, bench→WorkType map |
+| `R4WorkbenchFilterCache` | Startup cache: inverts recipeMaker.recipeUsers, builds per-bench filters, bench→WorkType map; strips smelter recipes, injects R4 bench recipes, and invalidates vanilla `AllRecipes` caches on mutated benches |
 | `Designator_RecycleThing` | Orders menu designator for drag-select recycling |
 | `Designator_RepairThing` | Orders menu designator for drag-select repair |
 | `Designator_CleanThing` | Orders menu designator for drag-select taint cleaning |
@@ -49,7 +49,7 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | Target | Type | Purpose |
 |---|---|---|
 | `Thing.GetGizmos` | Postfix | Inject per-item R4 gizmo buttons (recycle, repair, clean) with rich tooltips |
-| `Building_WorkTable.SpawnSetup` | Postfix | Strip stale bills (e.g. vanilla SmeltWeapon) on load/placement for save compat |
+| `Building_WorkTable.SpawnSetup` | Postfix | Remove leftover smelt bills (only `SmelterRecipesToStrip`, gated by `stripSmelterBills`) on load/placement; reset invalid target-count R4 bills |
 | `Toils_Haul.PlaceHauledThingInCell` | Postfix | Track placed ingredient stacks for R4 repair/clean jobs via `job.placedThings` and enable correct ingredient consumption |
 | `WorkGiver_DoBill.JobOnThing` (+ loaded overrides) | Postfix | Preserve vanilla/recycle bill selection, then substitute the first runnable R4 repair/clean bill above the selected bill |
 
@@ -112,9 +112,16 @@ The original design used `CompRecyclable` for tracking designations and gizmos. 
 
 ### Vanilla Smelting Override
 
-`VanillaSmelting.xml` removes `SmeltWeapon`, `SmeltApparel`, and `SmeltOrDestroyThing` from the electric smelter. R4's per-bench recycle bills replace these with skill-based recycling. `DestroyWeapon`/`DestroyApparel` and `ExtractMetalFromSlag` are kept intact.
+R4 replaces vanilla smelting with skill-based recycling, gated by the **`stripSmelterBills`** setting (default on). `DestroyWeapon`/`DestroyApparel` and `ExtractMetalFromSlag` are always kept intact.
 
-`Patch_BuildingWorkTable_SpawnSetup` (Harmony postfix) strips stale bills from saved workbenches whose recipe is no longer in the bench's `AllRecipes` list, ensuring clean save transitions without unconditional release-log spam.
+Two cooperating pieces, both keyed off the same `R4WorkbenchFilterCache.SmelterRecipesToStrip` set (`SmeltWeapon`, `SmeltApparel`, `SmeltOrDestroyThing`):
+
+1. **`R4WorkbenchFilterCache.StripSmelterRecipes`** (startup) removes those recipes from *every* bench's `recipes` list — done in code rather than XML so any modded smelter is covered, not just the vanilla `ElectricSmelter`.
+2. **`Patch_BuildingWorkTable_SpawnSetup`** (Harmony postfix) cleans up leftover smelt *bills* on already-saved benches, since the RecipeDef still exists and the serialised `BillStack` survives load. It deletes a bill **only** if `IsStrippedSmelterRecipe(bill.recipe)` — it deliberately does **not** validate against `def.AllRecipes`, because that list is a lazily-cached collection other mods (e.g. VEF recipe sharing) can rebuild incompletely, which previously caused legitimate vanilla/modded bills to be wrongly deleted. The postfix also resets invalid target-count R4 repair/clean bills to repeat-count mode (unrelated maintenance).
+
+**Setting semantics (restart-only):** smelter stripping irreversibly mutates `ThingDef.recipes`, so the decision is frozen for the whole session in `RRRR_Mod.StripSmelterBillsThisSession` (snapshotted in the `Mod` ctor at launch). Both the strip and the SpawnSetup cleanup read that frozen value, never the live setting — so a mid-session settings rebuild (`WriteSettings` → `R4WorkbenchFilterCache.Build`) can't partially apply the toggle. Changing it takes effect on the next RimWorld restart.
+
+**AllRecipes cache invalidation:** vanilla's `ThingDef.AllRecipes` caches into a private `allRecipesCached` field on first access and never re-reads `recipes`. Because R4 mutates `recipes` at runtime (strip + injected recycle/repair/clean recipes), `R4WorkbenchFilterCache` tracks every mutated bench in `BenchesWithMutatedRecipes` and nulls their `allRecipesCached` (via `AccessTools.FieldRef`) at the end of `Build`. Without this, any bench whose `AllRecipes` was materialised before our mutation (by another mod's static ctor or the UI) would keep a stale list and the bills tab would show the wrong recipes.
 
 ### Orders Menu
 
@@ -219,16 +226,19 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 | `skipIntricateComponents` | false | — | Exclude components from recycle returns |
 | `repairHpPerCycle` | 0.20 | 0.05–0.50 | HP fraction restored per cycle (drives cycle count) |
 | `cleanCostFraction` | 0.20 | 0.05–0.50 | Material cost as fraction of make cost |
+| `enableBillOrderingPostfix` | true | — | Lets R4 bills join DoBill bill-stack order; disable for ordering-conflict testing |
+| `stripSmelterBills` | true | — | Replace vanilla smelting with R4 recycling. **Restart-only** (see Vanilla Smelting Override) |
+| `debugLogging` | false | — | Verbose `[R4]` log messages |
 
 Derived: `RepairCyclesFull = Ceil(1/repairHpPerCycle)`, `RepairCostDivisor = RepairCyclesFull × 2`, `CleanCostDivisor = Round(1/cleanCostFraction)`.
 
 ## Install/Uninstall Safety
 
-**Safe to add mid-save:** No custom ThingComps on persistent objects, no custom MapComponents or WorldComponents. Designations and bills are created dynamically. The `Patch_BuildingWorkTable_SpawnSetup` postfix strips stale vanilla smelt bills on first load.
+**Safe to add mid-save:** No custom ThingComps on persistent objects, no custom MapComponents or WorldComponents. Designations and bills are created dynamically. When `stripSmelterBills` is on, the `Patch_BuildingWorkTable_SpawnSetup` postfix removes leftover smelt bills (only the `SmelterRecipesToStrip` set) on first load; all other existing bills are left untouched.
 
-**Safe to remove mid-save:** All mod-specific data (designations, jobs, bills) references mod-defined Defs. RimWorld's save system gracefully handles missing defs: designations are silently removed, active jobs fail and pawns get new ones, bills with missing recipes are stripped. Vanilla smelting recipes return when the XML patch stops applying. Settings file is left unused. No save corruption occurs.
+**Safe to remove mid-save:** All mod-specific data (designations, jobs, bills) references mod-defined Defs. RimWorld's save system gracefully handles missing defs: designations are silently removed, active jobs fail and pawns get new ones, bills with missing recipes are stripped. Smelter recipe stripping is a runtime `ThingDef.recipes` mutation that is never serialised, so vanilla smelting returns automatically once the mod stops loading. Settings file is left unused. No save corruption occurs.
 
-**Caution on removal:** Players will need to manually re-add vanilla SmeltWeapon/SmeltApparel bills to their electric smelters after uninstalling.
+**Caution on removal:** Players will need to manually re-add vanilla SmeltWeapon/SmeltApparel bills to their smelters after uninstalling.
 
 ## File Layout
 

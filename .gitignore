@@ -43,6 +43,7 @@ build_restore_err.log
 
 .github/
 CLAUDE.md
+.claude/
 
 .dotnet/
 Source/Backup/
