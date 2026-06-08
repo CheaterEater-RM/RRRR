@@ -43,8 +43,9 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `Designator_RecycleThing` | Orders menu designator for drag-select recycling |
 | `Designator_RepairThing` | Orders menu designator for drag-select repair |
 | `Designator_CleanThing` | Orders menu designator for drag-select taint cleaning |
+| `R4HauledDesignationTracker` | Persisted `GameComponent`: remembers R4 designations on items hauled into pawn inventory (keyed by `thingIDNumber`) so they can be re-applied on drop; supports PUaH/inventory-haul compatibility |
 
-### Harmony Patches (4 total)
+### Harmony Patches (6 total)
 
 | Target | Type | Purpose |
 |---|---|---|
@@ -52,6 +53,8 @@ R⁴ adds three item-management actions using existing workbenches — no new bu
 | `Building_WorkTable.SpawnSetup` | Postfix | Remove leftover smelt bills (only `SmelterRecipesToStrip`, gated by `stripSmelterBills`) on load/placement; reset invalid target-count R4 bills |
 | `Toils_Haul.PlaceHauledThingInCell` | Postfix | Track placed ingredient stacks for R4 repair/clean jobs via `job.placedThings` and enable correct ingredient consumption |
 | `WorkGiver_DoBill.JobOnThing` (+ loaded overrides) | Postfix | Preserve vanilla/recycle bill selection, then substitute the first runnable R4 repair/clean bill above the selected bill |
+| `ThingOwner.NotifyAdded` | Prefix | Capture R4 designations into `R4HauledDesignationTracker` just before vanilla strips them when an item enters a pawn's inventory (gated by `preserveInventoryDesignations`) |
+| `Thing.SpawnSetup` | Postfix | Restore captured R4 designations when a tracked item respawns on a map (PUaH unload, death drop, caravan return); consumes records unconditionally, re-applies only when enabled and still eligible |
 
 ### Designation Flow
 
@@ -226,17 +229,17 @@ Probabilistic rounding (`GenMath.RoundRandom`); minimum 1 guaranteed.
 | `skipIntricateComponents` | false | — | Exclude components from recycle returns |
 | `repairHpPerCycle` | 0.20 | 0.05–0.50 | HP fraction restored per cycle (drives cycle count) |
 | `cleanCostFraction` | 0.20 | 0.05–0.50 | Material cost as fraction of make cost |
-| `enableBillOrderingPostfix` | true | — | Lets R4 bills join DoBill bill-stack order; disable for ordering-conflict testing |
 | `stripSmelterBills` | true | — | Replace vanilla smelting with R4 recycling. **Restart-only** (see Vanilla Smelting Override) |
+| `preserveInventoryDesignations` | false | — | **Experimental.** Preserve R4 designations across pawn-inventory hauling (PUaH etc.). Toggles live; no-op when off (see Pick Up And Haul Designation Persistence) |
 | `debugLogging` | false | — | Verbose `[R4]` log messages |
 
 Derived: `RepairCyclesFull = Ceil(1/repairHpPerCycle)`, `RepairCostDivisor = RepairCyclesFull × 2`, `CleanCostDivisor = Round(1/cleanCostFraction)`.
 
 ## Install/Uninstall Safety
 
-**Safe to add mid-save:** No custom ThingComps on persistent objects, no custom MapComponents or WorldComponents. Designations and bills are created dynamically. When `stripSmelterBills` is on, the `Patch_BuildingWorkTable_SpawnSetup` postfix removes leftover smelt bills (only the `SmelterRecipesToStrip` set) on first load; all other existing bills are left untouched.
+**Safe to add mid-save:** No custom ThingComps on persistent objects, no custom MapComponents or WorldComponents. The one persistent component, `R4HauledDesignationTracker` (a `GameComponent`), is created empty on load when absent from the save, so adding the mod mid-game is safe. Designations and bills are created dynamically. When `stripSmelterBills` is on, the `Patch_BuildingWorkTable_SpawnSetup` postfix removes leftover smelt bills (only the `SmelterRecipesToStrip` set) on first load; all other existing bills are left untouched.
 
-**Safe to remove mid-save:** All mod-specific data (designations, jobs, bills) references mod-defined Defs. RimWorld's save system gracefully handles missing defs: designations are silently removed, active jobs fail and pawns get new ones, bills with missing recipes are stripped. Smelter recipe stripping is a runtime `ThingDef.recipes` mutation that is never serialised, so vanilla smelting returns automatically once the mod stops loading. Settings file is left unused. No save corruption occurs.
+**Safe to remove mid-save:** All mod-specific data (designations, jobs, bills, the `R4HauledDesignationTracker` component and its records) references mod-defined types/Defs. RimWorld's save system gracefully handles missing defs: designations are silently removed, active jobs fail and pawns get new ones, bills with missing recipes are stripped, and the tracker component simply stops loading (any item still mid-haul keeps whatever designation is currently on the map). Smelter recipe stripping is a runtime `ThingDef.recipes` mutation that is never serialised, so vanilla smelting returns automatically once the mod stops loading. Settings file is left unused. No save corruption occurs.
 
 **Caution on removal:** Players will need to manually re-add vanilla SmeltWeapon/SmeltApparel bills to their smelters after uninstalling.
 
@@ -256,11 +259,12 @@ RRRR\
     ├── Setup.cs              ← [StaticConstructorOnStartup] + Harmony init + cache trigger
     ├── Settings.cs           ← Verse.Mod subclass + ModSettings
     ├── Cache\                ← R4WorkbenchFilterCache (bench→item mapping, bench→WorkType, recipe filter stamping)
+    ├── Compat\               ← BISCompat, R4HauledDesignationTracker (inventory-haul designation persistence)
     ├── Defs\                 ← R4DefOf
     ├── Designators\          ← Designator_RecycleThing, Designator_RepairThing, Designator_CleanThing
     ├── Filters\              ← SpecialThingFilterWorker_Damaged, SpecialThingFilterWorker_Tainted
     ├── Jobs\                 ← JobDrivers (Recycle, Repair, Clean, shared Repair/Clean base), WorkGivers (designation + bill)
-    ├── Patches\              ← Harmony patches (Thing.GetGizmos, Building_WorkTable.SpawnSetup, PlaceHauledThingInCell)
+    ├── Patches\              ← Harmony patches (Thing.GetGizmos, Building_WorkTable.SpawnSetup, PlaceHauledThingInCell, ThingOwner.NotifyAdded, Thing.SpawnSetup)
     ├── RecipeWorkers\        ← RecipeWorker_R4Recycle, RecipeWorker_R4Repair, RecipeWorker_R4Clean
     └── Utility\              ← MaterialUtility, WorkbenchRouter, SkillUtility
 ```
@@ -286,15 +290,19 @@ RRRR\
 
   This display cell should be derived from the bench at runtime rather than stored as new persistent state. On benches with multiple occupied cells, one deterministic bench cell can be reserved as the display surface and removed from ingredient placement candidates. On 1x1 benches, where no separate occupied cell exists or the occupied cell is not spawnable, the display position must fall back to a deterministic adjacent cell near the interaction point. The user-facing requirement is "visibly at the bench," not "always on an occupied bench tile," because the latter is not physically valid for every vanilla bench shape.
 
-  ### Pick Up And Haul Designation Persistence
+  *(No active in-progress items.)*
 
-  R4's recycle, repair, and clean designations are attached directly to concrete `Thing` instances and the designation WorkGivers only scan spawned designations. Vanilla carry-tracker hauling preserves that model because `Pawn_CarryTracker` is not treated as an enclosing container, so adding an item to a pawn's hands does not strip designations. Pick Up And Haul is different: its inventory-haul path splits the target stack and adds the result to `Pawn_InventoryTracker`, and vanilla removes all designations from items added to enclosing containers.
+## Pick Up And Haul Designation Persistence
 
-  The compatibility consequence is specific and reproducible: an R4-designated item that enters the PUaH inventory path loses its R4 designation before unload, so the later spawned item is no longer visible to `SpawnedDesignationsOfDef(...)`. PUaH's own code also documents that partially merged hauled stacks can acquire a different `ThingID` while in inventory, which makes any identity-based designation tracking across that path more fragile than normal hauling.
+R4's recycle, repair, and clean designations are attached directly to concrete `Thing` instances and the designation WorkGivers only scan spawned designations. Vanilla carry-tracker hauling preserves that model because `Pawn_CarryTracker` is not treated as an enclosing container, so adding an item to a pawn's hands does not strip designations. Pick Up And Haul (and any mod that routes haulables through inventory) is different: its inventory-haul path splits the target stack and adds the result to `Pawn_InventoryTracker`, and vanilla `ThingOwner.NotifyAdded` removes all designations from items added to enclosing containers. The same strip happens on the death-drop and caravan-staging paths.
 
-  Preferred compatibility direction:
+**Implemented solution — capture at the strip, restore on respawn.** Rather than fighting PUaH or diverting its hauling (which would lose the useful bulk-collection behaviour of gathering many designated items near a bench in one trip), R4 lets the inventory haul proceed and preserves the designation across the round-trip. This is gated by the experimental, default-off **`preserveInventoryDesignations`** setting, so players without an inventory-haul mod get zero behavioural change.
 
-  - do not try to keep live R4 designations attached to inventory-held items
-  - when Pick Up And Haul is active, divert R4-designated items away from PUaH's `HaulToInventory` job and back to vanilla `HaulToStorageJob` before the item enters `Pawn_InventoryTracker`
-  - implement this as a soft-dependency compat patch on the PUaH workgiver/job-creation path, not in R4's repair/recycle job drivers
-  - only broaden scope to already-queued PUaH haul jobs if a focused repro still exists after the workgiver-level redirect
+- **Capture** — a read-only prefix on `ThingOwner.NotifyAdded`, scoped to `Pawn_InventoryTracker` owners, runs immediately before the vanilla strip. It records any live R4 designations on the item into `R4HauledDesignationTracker`. This is the exact method that performs the strip, so capture is co-located with the damage and cannot miss a strip-causing pickup. The item may already be despawned by this point (PUaH's `SplitOff` de-spawns a full stack before the add), but designations are keyed by `Thing` reference in `DesignationManager.thingDesignations` and survive despawn, so the prefix looks them up across all maps exactly as the vanilla strip loop does.
+- **Restore** — a postfix on `Thing.SpawnSetup` re-applies the captured designations when the same item respawns on a map. One hook covers every return-to-map path: PUaH unload, a pawn dying and dumping inventory, and a caravan returning/settling days later. The record is **consumed unconditionally** (so a disabled period or a toggle flip cannot resurrect a stale designation), and re-applied **only** when the setting is on and a fresh eligibility check still passes (mirroring the designators' `CanDesignateThing` rules — repair only if still damaged, clean only if still tainted apparel, recycle only if still gear-eligible). No work-giver changes are needed: once the item is back on the map with its designation, the existing `SpawnedDesignationsOfDef(...)` queries see it.
+
+**Why keying on `thingIDNumber` is sound here:** R4 designations only ever apply to apparel and weapons, which are non-stackable (`stackLimit 1`). `SplitOff` of a full non-stackable stack returns the same object and inventory never merges it, so the item's `thingIDNumber` is stable across the entire round-trip. If a stackable item were ever made designation-eligible, the hauled split-off would be a fresh `Thing` with no designation — capture finds nothing and the feature degrades gracefully rather than misbehaving.
+
+**State & persistence:** `R4HauledDesignationTracker` is a `GameComponent` holding `thingIDNumber → {DesignationDefs, capturedTick}`, persisted via `ExposeData` (so records survive a save and a multi-day caravan trip). It self-prunes: records are consumed on restore, aged-out entries (~30 in-game days) and an over-cap of 2000 are dropped on a periodic tick, and the tracker is cleared when the player turns the setting off. Entries whose defs fail to resolve on load (mod/def removed) are discarded.
+
+**Known limitation:** items PUaH deposits *directly into an enclosed container* (Extended Storage-style non-slot-group targets) do not respawn on a map cell, so `SpawnSetup` never fires and the designation is not restored. This is benign because an item inside an enclosed container is not workable by R4 anyway — it is a pre-existing limitation of map-cell-based designations, not a regression. Normal stockpile cells and shelves place spawned things on map cells and are fully covered.

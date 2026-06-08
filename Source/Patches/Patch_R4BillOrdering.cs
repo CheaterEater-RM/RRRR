@@ -75,9 +75,6 @@ namespace RRRR
             [HarmonyArgument(1)] Thing thing,
             [HarmonyArgument(2)] bool forced)
         {
-            if (RRRR_Mod.Settings?.enableBillOrderingPostfix == false)
-                return;
-
             if (!(thing is IBillGiver billGiver) ||
                 !R4BillJobFactory.HasAnyR4RepairOrCleanBill(billGiver))
             {

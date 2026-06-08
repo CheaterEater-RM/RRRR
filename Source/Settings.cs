@@ -22,18 +22,22 @@ namespace RRRR
         public bool debugLogging = false;
 
         /// <summary>
-        /// Compatibility escape hatch for R4's DoBill postfix. Prefix-replaced
-        /// DoBill calls only participate when they return a concrete bill job.
-        /// </summary>
-        public bool enableBillOrderingPostfix = true;
-
-        /// <summary>
         /// If true (default), R4 strips vanilla smelting (SmeltWeapon/SmeltApparel/
         /// SmeltOrDestroyThing) from benches and cleans up leftover smelt bills on
         /// saved benches, replacing it with R4 recycling. Turn off to keep vanilla
         /// smelting. Only takes effect after restarting RimWorld.
         /// </summary>
         public bool stripSmelterBills = true;
+
+        /// <summary>
+        /// Experimental (default off). When on, R4 repair/recycle/clean
+        /// designations survive being hauled into a pawn's inventory (e.g. by
+        /// Pick Up And Haul) and are re-applied when the item is dropped back on
+        /// the map. Gates the NotifyAdded capture patch and the SpawnSetup restore
+        /// patch at runtime, so it toggles without a restart and is a no-op when
+        /// off. See <see cref="R4HauledDesignationTracker"/>.
+        /// </summary>
+        public bool preserveInventoryDesignations = false;
 
         // ── Recycle ───────────────────────────────────────────────────────────
         /// <summary>Scalar applied to all recycled material yields. 1.0 = default.</summary>
@@ -95,8 +99,8 @@ namespace RRRR
             Scribe_Values.Look(ref repairHpPerCycle,        "repairHpPerCycle",        0.20f);
             Scribe_Values.Look(ref minorMendingThreshold,   "minorMendingThreshold",   0.95f);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
-            Scribe_Values.Look(ref enableBillOrderingPostfix, "enableBillOrderingPostfix", true);
             Scribe_Values.Look(ref stripSmelterBills,       "stripSmelterBills",       true);
+            Scribe_Values.Look(ref preserveInventoryDesignations, "preserveInventoryDesignations", false);
         }
 
         public void ResetToDefaults()
@@ -107,8 +111,8 @@ namespace RRRR
             repairHpPerCycle        = 0.20f;
             minorMendingThreshold   = 0.95f;
             cleanCostFraction       = 0.20f;
-            enableBillOrderingPostfix = true;
             stripSmelterBills       = true;
+            preserveInventoryDesignations = false;
         }
 
         public bool HasSameValuesAs(RRRR_Settings other)
@@ -122,8 +126,8 @@ namespace RRRR
                 && Mathf.Approximately(repairHpPerCycle, other.repairHpPerCycle)
                 && Mathf.Approximately(minorMendingThreshold, other.minorMendingThreshold)
                 && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction)
-                && enableBillOrderingPostfix == other.enableBillOrderingPostfix
-                && stripSmelterBills == other.stripSmelterBills;
+                && stripSmelterBills == other.stripSmelterBills
+                && preserveInventoryDesignations == other.preserveInventoryDesignations;
         }
 
         public RRRR_Settings Snapshot()
@@ -136,8 +140,8 @@ namespace RRRR
                 repairHpPerCycle = repairHpPerCycle,
                 minorMendingThreshold = minorMendingThreshold,
                 cleanCostFraction = cleanCostFraction,
-                enableBillOrderingPostfix = enableBillOrderingPostfix,
                 stripSmelterBills = stripSmelterBills,
+                preserveInventoryDesignations = preserveInventoryDesignations,
             };
         }
     }
@@ -175,6 +179,14 @@ namespace RRRR
             base.WriteSettings();
             R4WorkbenchFilterCache.Build();
             ApplySettings(force: true);
+
+            // When the player turns the experimental inventory-designation
+            // preservation off, drop any captured records so a later re-enable
+            // can't resurrect a stale designation on an item that has since been
+            // dropped/handled. (Restore already drains entries unconditionally on
+            // respawn; this is belt-and-suspenders for items still in inventory.)
+            if (!Settings.preserveInventoryDesignations)
+                R4HauledDesignationTracker.Instance?.Clear();
         }
 
         public override void DoSettingsWindowContents(Rect inRect)
@@ -233,14 +245,14 @@ namespace RRRR
             listing.GapLine();
 
             listing.CheckboxLabeled(
-                "R4_Settings_EnableBillOrderingPostfix".Translate(),
-                ref Settings.enableBillOrderingPostfix,
-                "R4_Settings_EnableBillOrderingPostfix_Tip".Translate());
-
-            listing.CheckboxLabeled(
                 "R4_Settings_StripSmelterBills".Translate(),
                 ref Settings.stripSmelterBills,
                 "R4_Settings_StripSmelterBills_Tip".Translate());
+
+            listing.CheckboxLabeled(
+                "R4_Settings_PreserveInvDesig".Translate(),
+                ref Settings.preserveInventoryDesignations,
+                "R4_Settings_PreserveInvDesig_Tip".Translate());
 
             listing.Gap();
 

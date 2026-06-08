@@ -28,9 +28,13 @@ By default R4 replaces the vanilla Smelt Weapon, Smelt Apparel, and Smelt Items 
 
 If you'd rather keep vanilla smelting, turn off **"Replace smelting with R⁴ recycling"** in the mod settings. This option only takes effect after restarting RimWorld.
 
+## Pick Up And Haul Compatibility
+
+Mods like Pick Up And Haul carry items into a pawn's inventory for bulk hauling. RimWorld strips designations from anything that enters an inventory, so without help your repair/recycle/clean marks would vanish in transit. Enable the experimental **"Preserve designations when items are hauled into inventory"** setting (off by default) to keep those marks — they're re-applied when the item is dropped back down, whether by hauling, a pawn dying, or a returning caravan. Leave it off if you don't use an inventory-hauling mod.
+
 ## Save Safety
 
-R4 is safe to add or remove from an ongoing save. It does not add custom components to items or maps. On removal, any pending R4 designations and bills are cleaned up automatically. You may need to re-add vanilla smelting bills to your smelters after uninstalling.
+R4 is safe to add or remove from an ongoing save. It adds no custom components to items or maps (it keeps a small bookkeeping record on the game for inventory-haul designation preservation, which loads empty on existing saves and is harmless to remove). On removal, any pending R4 designations and bills are cleaned up automatically. You may need to re-add vanilla smelting bills to your smelters after uninstalling.
 
 ## License
 
