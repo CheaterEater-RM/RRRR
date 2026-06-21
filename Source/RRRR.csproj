@@ -12,8 +12,17 @@
     <FileVersion>0.1.0.0</FileVersion>
     <Description>Recycle, Repair, and Clean weapons and apparel</Description>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
     <OutputPath>..\1.6\Assemblies\</OutputPath>
     <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+
+    <!-- Ship the same artifact in any configuration: optimized, with NO debug
+         symbols and NO .pdb. A .pdb is unused at runtime (only compile errors
+         matter) and leaks absolute source paths into the .pdb and the dll's
+         debug-directory header. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <Optimize>true</Optimize>
   </PropertyGroup>
 
   <ItemGroup>

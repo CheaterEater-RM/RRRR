@@ -10,6 +10,7 @@ RimWorld.Paths.props
 *.user
 *.suo
 *.cache
+*.lscache
 *.rsuser
 
 # Build artifacts
