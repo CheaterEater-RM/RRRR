@@ -28,9 +28,9 @@ By default R4 replaces the vanilla Smelt Weapon, Smelt Apparel, and Smelt Items 
 
 If you'd rather keep vanilla smelting, turn off **"Replace smelting with R⁴ recycling"** in the mod settings. This option only takes effect after restarting RimWorld.
 
-## Pick Up And Haul Compatibility
+## Inventory-Hauling Mod Compatibility
 
-Mods like Pick Up And Haul carry items into a pawn's inventory for bulk hauling. RimWorld strips designations from anything that enters an inventory, so without help your repair/recycle/clean marks would vanish in transit. Enable the experimental **"Preserve designations when items are hauled into inventory"** setting (off by default) to keep those marks — they're re-applied when the item is dropped back down, whether by hauling, a pawn dying, or a returning caravan. Leave it off if you don't use an inventory-hauling mod.
+Mods like Pick Up And Haul and Hauler's Dream carry items into a pawn's inventory for bulk hauling. RimWorld strips designations from anything that enters an inventory, so your repair/recycle/clean marks would otherwise vanish in transit. R4 handles this automatically — it remembers the marks when an item is picked up and re-applies them when the item is dropped back down, whether by hauling, a pawn dying, or a returning caravan. There's nothing to configure; it only does work when an item actually enters a pawn's inventory.
 
 ## Save Safety
 

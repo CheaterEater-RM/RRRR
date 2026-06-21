@@ -29,16 +29,6 @@ namespace RRRR
         /// </summary>
         public bool stripSmelterBills = true;
 
-        /// <summary>
-        /// Experimental (default off). When on, R4 repair/recycle/clean
-        /// designations survive being hauled into a pawn's inventory (e.g. by
-        /// Pick Up And Haul) and are re-applied when the item is dropped back on
-        /// the map. Gates the NotifyAdded capture patch and the SpawnSetup restore
-        /// patch at runtime, so it toggles without a restart and is a no-op when
-        /// off. See <see cref="R4HauledDesignationTracker"/>.
-        /// </summary>
-        public bool preserveInventoryDesignations = false;
-
         // ── Recycle ───────────────────────────────────────────────────────────
         /// <summary>Scalar applied to all recycled material yields. 1.0 = default.</summary>
         public float recycleGlobalMult = 1.0f;
@@ -100,7 +90,6 @@ namespace RRRR
             Scribe_Values.Look(ref minorMendingThreshold,   "minorMendingThreshold",   0.95f);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
             Scribe_Values.Look(ref stripSmelterBills,       "stripSmelterBills",       true);
-            Scribe_Values.Look(ref preserveInventoryDesignations, "preserveInventoryDesignations", false);
         }
 
         public void ResetToDefaults()
@@ -112,7 +101,6 @@ namespace RRRR
             minorMendingThreshold   = 0.95f;
             cleanCostFraction       = 0.20f;
             stripSmelterBills       = true;
-            preserveInventoryDesignations = false;
         }
 
         public bool HasSameValuesAs(RRRR_Settings other)
@@ -126,8 +114,7 @@ namespace RRRR
                 && Mathf.Approximately(repairHpPerCycle, other.repairHpPerCycle)
                 && Mathf.Approximately(minorMendingThreshold, other.minorMendingThreshold)
                 && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction)
-                && stripSmelterBills == other.stripSmelterBills
-                && preserveInventoryDesignations == other.preserveInventoryDesignations;
+                && stripSmelterBills == other.stripSmelterBills;
         }
 
         public RRRR_Settings Snapshot()
@@ -141,7 +128,6 @@ namespace RRRR
                 minorMendingThreshold = minorMendingThreshold,
                 cleanCostFraction = cleanCostFraction,
                 stripSmelterBills = stripSmelterBills,
-                preserveInventoryDesignations = preserveInventoryDesignations,
             };
         }
     }
@@ -179,14 +165,6 @@ namespace RRRR
             base.WriteSettings();
             R4WorkbenchFilterCache.Build();
             ApplySettings(force: true);
-
-            // When the player turns the experimental inventory-designation
-            // preservation off, drop any captured records so a later re-enable
-            // can't resurrect a stale designation on an item that has since been
-            // dropped/handled. (Restore already drains entries unconditionally on
-            // respawn; this is belt-and-suspenders for items still in inventory.)
-            if (!Settings.preserveInventoryDesignations)
-                R4HauledDesignationTracker.Instance?.Clear();
         }
 
         public override void DoSettingsWindowContents(Rect inRect)
@@ -248,11 +226,6 @@ namespace RRRR
                 "R4_Settings_StripSmelterBills".Translate(),
                 ref Settings.stripSmelterBills,
                 "R4_Settings_StripSmelterBills_Tip".Translate());
-
-            listing.CheckboxLabeled(
-                "R4_Settings_PreserveInvDesig".Translate(),
-                ref Settings.preserveInventoryDesignations,
-                "R4_Settings_PreserveInvDesig_Tip".Translate());
 
             listing.Gap();
 

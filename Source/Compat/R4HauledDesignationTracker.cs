@@ -21,9 +21,9 @@ namespace RRRR
     /// <c>SplitOff</c> of a full stack returns the same Thing and inventory never
     /// merges it with another stack.
     ///
-    /// This whole mechanism is gated by the experimental
-    /// <c>preserveInventoryDesignations</c> setting; when off, capture never runs
-    /// and restore drains records without re-applying.
+    /// Always active — there is no setting to gate it; the capture/restore pair is
+    /// read-only on the strip path and additive (with a fresh eligibility check) on
+    /// respawn, so it is safe to run unconditionally for any inventory-hauling mod.
     /// </summary>
     public class R4HauledDesignationTracker : GameComponent
     {

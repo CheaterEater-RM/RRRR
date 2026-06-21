@@ -23,7 +23,8 @@ namespace RRRR
     /// we look them up across all maps just as the vanilla strip loop does.
     ///
     /// Read-only: never alters NotifyAdded's behavior; the vanilla strip still runs.
-    /// Gated by the experimental preserveInventoryDesignations setting.
+    /// Always active — keeps R4 marks alive across any inventory-hauling mod
+    /// (Pick Up And Haul, Hauler's Dream, …) without naming or detecting one.
     /// </summary>
     [HarmonyPatch(typeof(ThingOwner), "NotifyAdded", new Type[] { typeof(Thing) })]
     public static class Patch_ThingOwner_NotifyAdded_CaptureDesignations
@@ -31,9 +32,6 @@ namespace RRRR
         [HarmonyPrefix]
         public static void Prefix(ThingOwner __instance, Thing item)
         {
-            if (!RRRR_Mod.Settings.preserveInventoryDesignations)
-                return;
-
             if (item == null || !(__instance.Owner is Pawn_InventoryTracker))
                 return;
 

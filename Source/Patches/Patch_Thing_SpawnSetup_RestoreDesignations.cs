@@ -9,14 +9,13 @@ namespace RRRR
     /// Restore half of the inventory-designation-preservation feature.
     ///
     /// When an item that was hauled into a pawn's inventory is dropped back onto a
-    /// map — by Pick Up And Haul's unload, by a pawn dying, or by a caravan
-    /// returning/settling — it respawns and this postfix fires. If the tracker has
-    /// a record for it, the captured R4 designations are re-applied.
+    /// map — by an inventory-hauling mod's unload (Pick Up And Haul, Hauler's
+    /// Dream, …), by a pawn dying, or by a caravan returning/settling — it respawns
+    /// and this postfix fires. If the tracker has a record for it, the captured R4
+    /// designations are re-applied.
     ///
-    /// The record is consumed unconditionally (even when the feature is off) so a
-    /// later re-enable cannot resurrect a stale designation. Re-application is
-    /// gated on the setting and on a fresh eligibility check, so we never schedule
-    /// a stale repair/clean/recycle job for an item whose state changed in transit.
+    /// Re-application is gated on a fresh eligibility check, so we never schedule a
+    /// stale repair/clean/recycle job for an item whose state changed in transit.
     /// </summary>
     [HarmonyPatch(typeof(Thing), nameof(Thing.SpawnSetup))]
     public static class Patch_Thing_SpawnSetup_RestoreDesignations
@@ -32,11 +31,7 @@ namespace RRRR
             if (respawningAfterLoad)
                 return;
 
-            // Consume unconditionally so disabled periods drain stale records.
             if (!tracker.TryConsume(__instance.thingIDNumber, out List<DesignationDef> defs))
-                return;
-
-            if (!RRRR_Mod.Settings.preserveInventoryDesignations)
                 return;
 
             if (map == null || defs == null)

@@ -76,8 +76,6 @@
   <R4_Settings_CompatibilityHeader>Compatibility</R4_Settings_CompatibilityHeader>
   <R4_Settings_StripSmelterBills>Replace smelting with R⁴ recycling</R4_Settings_StripSmelterBills>
   <R4_Settings_StripSmelterBills_Tip>When on (default) R⁴ removes vanilla smelting from smelters and clears any leftover smelt bills on existing benches. Turn off to keep vanilla smelting and use your smelters normally. Requires restarting RimWorld to take effect.</R4_Settings_StripSmelterBills_Tip>
-  <R4_Settings_PreserveInvDesig>Pick Up and Haul compatibility patch (experimental)</R4_Settings_PreserveInvDesig>
-  <R4_Settings_PreserveInvDesig_Tip>When on, R⁴ repair/recycle/clean designations survive being picked up into a pawn's inventory (for example by Pick Up And Haul) and are re-applied when the item is dropped back onto the map. Off by default.</R4_Settings_PreserveInvDesig_Tip>
 
   <R4_Settings_DebugHeader>Developer</R4_Settings_DebugHeader>
   <R4_Settings_DebugLogging>Enable debug logging</R4_Settings_DebugLogging>
