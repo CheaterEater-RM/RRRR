@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-item overrides for R4's material basis (R4MaterialCostExtension).
+
+  Intentionally empty. Uncraftable gear (no costList, not made from stuff) is handled
+  by R4's automatic MarketValue + techLevel fallback, which for the notable cases —
+  the ultratech melee weapons (monosword / zeushammer / plasmasword / eltex staff,
+  all MarketValue 2000) and the eltex apparel — already lands close to a sensible
+  hand-tuned cost. So nothing needs an override today.
+
+  This file is kept as a scaffold: add an R4MaterialCostExtension here only when the
+  fallback reads poorly for a specific item and you want to hand-author its cost. The
+  extension's <materials> is treated exactly like a costList and drives recycle, repair,
+  and clean alike. Wrap DLC-only targets in a PatchOperationFindMod so absent DLC never
+  logs a failed xpath. Template:
+
+  <Operation Class="PatchOperationFindMod">
+    <mods>
+      <li>Royalty</li>
+    </mods>
+    <match Class="PatchOperationAddModExtension">
+      <xpath>Defs/ThingDef[defName="MeleeWeapon_MonoSword"]</xpath>
+      <value>
+        <li Class="RRRR.R4MaterialCostExtension">
+          <materials>
+            <Plasteel>40</Plasteel>
+            <ComponentSpacer>3</ComponentSpacer>
+          </materials>
+        </li>
+      </value>
+    </match>
+  </Operation>
+-->
+<Patch>
+</Patch>

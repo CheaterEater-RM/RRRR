@@ -17,6 +17,10 @@ namespace RRRR
             DesignationManager designationManager = pawn.Map.designationManager;
             if (designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
                 return false;
+            // Re-check eligibility: a designation persisted from an older save (before
+            // the item became excluded) must not schedule work on a now-ineligible item.
+            if (!R4WorkbenchFilterCache.IsRecycleEligible(t.def))
+                return false;
             if (designationManager.DesignationOn(t, R4DefOf.R4_Repair) != null ||
                 designationManager.DesignationOn(t, R4DefOf.R4_Clean) != null)
                 return false;
@@ -32,6 +36,8 @@ namespace RRRR
         {
             DesignationManager designationManager = pawn.Map.designationManager;
             if (designationManager.DesignationOn(t, R4DefOf.R4_Recycle) == null)
+                return null;
+            if (!R4WorkbenchFilterCache.IsRecycleEligible(t.def))
                 return null;
             if (designationManager.DesignationOn(t, R4DefOf.R4_Repair) != null ||
                 designationManager.DesignationOn(t, R4DefOf.R4_Clean) != null)

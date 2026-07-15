@@ -20,6 +20,9 @@
          symbols and NO .pdb. A .pdb is unused at runtime (only compile errors
          matter) and leaks absolute source paths into the .pdb and the dll's
          debug-directory header. -->
+    <Platforms>AnyCPU</Platforms>
+    <Configurations>Debug;Release</Configurations>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <Optimize>true</Optimize>

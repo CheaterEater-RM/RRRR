@@ -3,10 +3,19 @@
 
   <Def Class="RRRR.R4EligibilityExclusionDef">
     <defName>RRRR_DefaultEligibilityExclusions</defName>
-    <excludedThingDefs>
-      <li>Beer</li>
-      <li>WoodLog</li>
-    </excludedThingDefs>
+
+    <!-- Trade tags that auto-exclude any weapon/apparel carrying them. "AnimalPart" is
+         the vanilla marker on natural resource-weapons (thrumbo/elephant/mastodon/alpha
+         horns and tusks, incl. Odyssey DLC) — melee verbs on a raw animal part, with no
+         true crafting ingredients. Reading the tag covers every such item, Core, DLC, or
+         modded, without listing each defName. This is R4's primary exclusion path. -->
+    <excludedTradeTags>
+      <li>AnimalPart</li>
+    </excludedTradeTags>
+
+    <!-- Explicit per-def escape hatch for any UNTAGGED outlier that still shouldn't be
+         workable. Empty by default; add defNames here as needed. -->
+    <excludedThingDefs />
   </Def>
 
 </Defs>

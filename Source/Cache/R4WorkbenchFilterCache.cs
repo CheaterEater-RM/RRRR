@@ -156,20 +156,61 @@ namespace RRRR
 
         static void BuildEligibilityExclusions()
         {
+            var excludedTags = new HashSet<string>();
+
             foreach (R4EligibilityExclusionDef exclusionDef in DefDatabase<R4EligibilityExclusionDef>.AllDefsListForReading)
             {
-                if (exclusionDef.excludedThingDefs == null) continue;
-
-                for (int i = 0; i < exclusionDef.excludedThingDefs.Count; i++)
+                if (exclusionDef.excludedThingDefs != null)
                 {
-                    ThingDef thingDef = exclusionDef.excludedThingDefs[i];
-                    if (thingDef != null)
-                        ExplicitlyExcludedItems.Add(thingDef);
+                    for (int i = 0; i < exclusionDef.excludedThingDefs.Count; i++)
+                    {
+                        ThingDef thingDef = exclusionDef.excludedThingDefs[i];
+                        if (thingDef != null)
+                            ExplicitlyExcludedItems.Add(thingDef);
+                    }
+                }
+
+                if (exclusionDef.excludedTradeTags != null)
+                {
+                    for (int i = 0; i < exclusionDef.excludedTradeTags.Count; i++)
+                    {
+                        string tag = exclusionDef.excludedTradeTags[i];
+                        if (!tag.NullOrEmpty())
+                            excludedTags.Add(tag);
+                    }
+                }
+            }
+
+            int explicitCount = ExplicitlyExcludedItems.Count;
+            int taggedCount   = 0;
+
+            // Auto-exclude any gear whose trade tags name an excluded tag. "AnimalPart"
+            // is the canonical case: natural resource-weapons (horns, tusks) carry it,
+            // and it is a vanilla-authored semantic label — reading it identifies the
+            // category directly, unlike a proxy such as stackLimit. Covers Core, DLC,
+            // and modded animal-part gear without per-def enumeration.
+            if (excludedTags.Count > 0)
+            {
+                foreach (ThingDef def in DefDatabase<ThingDef>.AllDefsListForReading)
+                {
+                    if (def.tradeTags == null) continue;
+                    if (!def.useHitPoints || !(def.IsWeapon || def.IsApparel)) continue;
+                    if (ExplicitlyExcludedItems.Contains(def)) continue;
+
+                    for (int i = 0; i < def.tradeTags.Count; i++)
+                    {
+                        if (excludedTags.Contains(def.tradeTags[i]))
+                        {
+                            ExplicitlyExcludedItems.Add(def);
+                            taggedCount++;
+                            break;
+                        }
+                    }
                 }
             }
 
             if (ExplicitlyExcludedItems.Count > 0)
-                R4Log.Debug($"Loaded {ExplicitlyExcludedItems.Count} explicit R4 eligibility exclusion(s).");
+                R4Log.Debug($"Loaded {explicitCount} explicit + {taggedCount} trade-tag R4 eligibility exclusion(s).");
         }
 
         // ── Step -1: strip smelter recipes from all benches ───────────────────
@@ -988,6 +1029,12 @@ namespace RRRR
             return def != null &&
                    def.useHitPoints &&
                    (def.IsWeapon || def.IsApparel) &&
+                   // Exclude improvised weapons whose real identity is food or raw
+                   // material — they carry melee tools (so IsWeapon is true) but no
+                   // genuine weapon/apparel is ingestible or a stuff. Catches beer,
+                   // wood, and modded food/material improvised weapons by rule.
+                   def.ingestible == null &&
+                   !def.IsStuff &&
                    !ExplicitlyExcludedItems.Contains(def);
         }
 

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using RimWorld;
 using Verse;
 
 namespace RRRR
@@ -84,6 +86,57 @@ namespace RRRR
         public void Clear()
         {
             _records.Clear();
+        }
+
+        /// <summary>
+        /// Load-time sweep (runs on game load, not new games): drop any R4 designation
+        /// that survived in a save but whose target item is no longer eligible for that
+        /// operation — e.g. the item became excluded by a new blacklist entry, trade-tag
+        /// rule, or eligibility change in a mod update. The WorkGivers already refuse to
+        /// act on such designations; this additionally clears the orphaned map overlay so
+        /// it doesn't linger. Distinct from the inventory round-trip tracking above; it
+        /// shares this component only to avoid adding a second GameComponent.
+        /// </summary>
+        public override void LoadedGame()
+        {
+            base.LoadedGame();
+            CleanStaleDesignations();
+        }
+
+        private static void CleanStaleDesignations()
+        {
+            List<Map> maps = Find.Maps;
+            if (maps == null)
+                return;
+
+            for (int m = 0; m < maps.Count; m++)
+            {
+                DesignationManager dm = maps[m]?.designationManager;
+                if (dm == null)
+                    continue;
+
+                RemoveIneligible(dm, R4DefOf.R4_Repair,  def => R4WorkbenchFilterCache.IsRepairEligible(def));
+                RemoveIneligible(dm, R4DefOf.R4_Recycle, def => R4WorkbenchFilterCache.IsRecycleEligible(def));
+                RemoveIneligible(dm, R4DefOf.R4_Clean,   def => R4WorkbenchFilterCache.IsCleanEligible(def));
+            }
+        }
+
+        private static void RemoveIneligible(DesignationManager dm, DesignationDef desDef, Func<ThingDef, bool> eligible)
+        {
+            // Collect first — RemoveDesignation mutates the manager's list.
+            List<Designation> toRemove = null;
+            foreach (Designation des in dm.SpawnedDesignationsOfDef(desDef))
+            {
+                Thing t = des.target.Thing;
+                if (t == null || !eligible(t.def))
+                    (toRemove ?? (toRemove = new List<Designation>())).Add(des);
+            }
+
+            if (toRemove == null)
+                return;
+
+            for (int i = 0; i < toRemove.Count; i++)
+                dm.RemoveDesignation(toRemove[i]);
         }
 
         public override void GameComponentTick()

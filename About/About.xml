@@ -6,8 +6,8 @@
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
-  <description>R⁴: Rimworld Reduce, Reuse, and Recycle. Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
-  <modVersion>1.47</modVersion>
+  <description>Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
+  <modVersion>1.48</modVersion>
 
   <modDependencies>
     <li>

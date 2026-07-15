@@ -94,7 +94,7 @@ namespace RRRR
             float returnPct = CalculateReturnPercent(thing, skillLevel);
             var settings    = RRRR_Mod.Settings;
 
-            var costList = thing.def.CostListAdjusted(thing.Stuff, errorOnNullStuff: false);
+            var costList = ResolveMaterialBasis(thing);
             if (costList != null)
             {
                 for (int i = 0; i < costList.Count; i++)
@@ -152,7 +152,7 @@ namespace RRRR
             int skillLevel  = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
             float returnPct = CalculateReturnPercent(item, skillLevel) * reclaimFactor;
 
-            var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
+            var costList = ResolveMaterialBasis(item);
             if (costList == null) return;
 
             for (int i = 0; i < costList.Count; i++)
@@ -192,7 +192,7 @@ namespace RRRR
         public static List<ThingDefCountClass> GetRepairCycleCost(Thing item)
         {
             var costs    = new List<ThingDefCountClass>();
-            var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
+            var costList = ResolveMaterialBasis(item);
             if (costList == null) return costs;
 
             var settings   = RRRR_Mod.Settings;
@@ -229,7 +229,7 @@ namespace RRRR
         public static List<ThingDefCountClass> GetCleanCost(Thing item)
         {
             var costs    = new List<ThingDefCountClass>();
-            var costList = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
+            var costList = ResolveMaterialBasis(item);
             if (costList == null) return costs;
 
             int divisor = RRRR_Mod.Settings.CleanCostDivisor;
@@ -248,6 +248,81 @@ namespace RRRR
                 AddFallback(costList, costs);
 
             return costs;
+        }
+
+        // ================================================================
+        // MATERIAL BASIS RESOLUTION
+        // ================================================================
+
+        // Fraction of an item's MarketValue used as the synthetic "full-rebuild"
+        // material value when no real costList or authored extension exists.
+        private const float FallbackValueFrac = 0.15f;
+
+        /// <summary>
+        /// Resolve the material basis (a synthetic full-rebuild costList) that drives
+        /// every R4 operation for this item. Precedence:
+        ///   1. real CostListAdjusted (craftable / made-from-stuff items)
+        ///   2. authored R4MaterialCostExtension.materials (per-item override)
+        ///   3. MarketValue + techLevel fallback (default for uncraftables)
+        /// Exclusion is handled upstream by the eligibility blacklist, never here — a
+        /// blacklisted item never reaches an operation, so this always returns a
+        /// non-empty basis for anything it is asked about.
+        /// </summary>
+        public static List<ThingDefCountClass> ResolveMaterialBasis(Thing item)
+        {
+            var cost = item.def.CostListAdjusted(item.Stuff, errorOnNullStuff: false);
+            if (cost != null && cost.Count > 0) return cost;
+
+            var ext = item.def.GetModExtension<R4MaterialCostExtension>();
+            if (ext?.materials != null && ext.materials.Count > 0) return ext.materials;
+
+            return SynthesizeFallbackCost(item.def);
+        }
+
+        /// <summary>
+        /// Build a synthetic full-rebuild costList from an item's MarketValue and tech
+        /// level, so uncraftable gear (e.g. ultratech reward weapons) still has a
+        /// sensible material basis for recycle/repair/clean. Returns at least one unit
+        /// of a bulk material, so a workable item is never a zero-yield dead entry.
+        /// </summary>
+        private static List<ThingDefCountClass> SynthesizeFallbackCost(ThingDef def)
+        {
+            var result = new List<ThingDefCountClass>();
+
+            TechLevel tech = def.techLevel == TechLevel.Undefined
+                ? TechLevel.Industrial
+                : def.techLevel;
+
+            ThingDef bulk;
+            ThingDef component;
+            if (tech >= TechLevel.Spacer)
+            {
+                bulk      = ThingDefOf.Plasteel;
+                component = ThingDefOf.ComponentSpacer;
+            }
+            else if (tech >= TechLevel.Industrial)
+            {
+                bulk      = ThingDefOf.Steel;
+                component = ThingDefOf.ComponentIndustrial;
+            }
+            else
+            {
+                bulk      = ThingDefOf.Steel;
+                component = null;
+            }
+
+            float targetValue   = Mathf.Max(0f, def.GetStatValueAbstract(StatDefOf.MarketValue)) * FallbackValueFrac;
+            float bulkUnitValue = Mathf.Max(0.01f, bulk.GetStatValueAbstract(StatDefOf.MarketValue));
+            int   bulkUnits     = Mathf.Max(1, Mathf.RoundToInt(targetValue / bulkUnitValue));
+            result.Add(new ThingDefCountClass(bulk, bulkUnits));
+
+            // A small fixed component count, mirroring vanilla spacer weapons (e.g.
+            // charge rifle = 2 ComponentSpacer). Kept modest so repair cycles don't
+            // demand an unreasonable component stream.
+            if (component != null)
+                result.Add(new ThingDefCountClass(component, 2));
+
+            return result;
         }
 
         // ================================================================
