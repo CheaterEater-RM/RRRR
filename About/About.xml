@@ -5,6 +5,7 @@
   <packageId>CheaterEater.RRRR</packageId>
   <supportedVersions>
     <li>1.6</li>
+    <li>1.7</li>
   </supportedVersions>
   <description>Adds recycle, repair, and clean actions for weapons and apparel using existing workbenches.</description>
   <modVersion>1.48</modVersion>
