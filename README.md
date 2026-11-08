@@ -34,8 +34,14 @@ Mods like Pick Up And Haul and Hauler's Dream carry items into a pawn's inventor
 
 ## Save Safety
 
-R4 is safe to add or remove from an ongoing save. It adds no custom components to items or maps (it keeps a small bookkeeping record on the game for inventory-haul designation preservation, which loads empty on existing saves and is harmless to remove). On removal, any pending R4 designations and bills are cleaned up automatically. You may need to re-add vanilla smelting bills to your smelters after uninstalling.
+Adding or removing R4 can shift work priorities for work types from mods loaded after it. Removing it also drops its saved bookkeeping component with errors, removes R4 designations and bills, and may strand a pawn saved during an R4 job. These are source-analysis findings; the job-stranding scenario has not been reproduced in game.
+
+Before removing R4, finish or cancel R4 jobs, clear R4 designations and bills, and save. This does not eliminate component errors or the work-priority shift. Re-check affected work priorities after adding/removing it and re-create vanilla smelting bills after removal.
 
 ## License
 
 MIT
+
+## Documentation
+
+Design and engineering notes: `design-rrrr` (`garden/design/rrrr/design-rrrr.md`), with `rrrr-implementation` as the engineering companion (`garden/design/rrrr/rrrr-implementation.md`).
