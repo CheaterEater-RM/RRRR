@@ -9,7 +9,7 @@ namespace RRRR
     public static class RRRR_Init
     {
         private const int AuthoredAgainstRimWorldMajor = 1;
-        private const int AuthoredAgainstRimWorldMinor = 6;
+        private const int AuthoredAgainstRimWorldMinor = 7;
 
         static RRRR_Init()
         {
