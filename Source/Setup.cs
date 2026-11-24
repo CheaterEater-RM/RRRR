@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using HarmonyLib;
 using RimWorld;
@@ -14,7 +15,7 @@ namespace RRRR
         static RRRR_Init()
         {
             var harmony = new Harmony("com.cheatereater.rrrr");
-            harmony.PatchAll();
+            harmony.PatchAll(Assembly.GetExecutingAssembly());
 
             BISCompat.Initialize();
             WarnIfRimWorldVersionDiffers();
