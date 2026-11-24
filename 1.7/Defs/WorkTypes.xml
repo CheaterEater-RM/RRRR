@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <WorkTypeDef>
+    <defName>RRRR_BillOnly</defName>
+    <label>R4 bill work</label>
+    <labelShort>R4</labelShort>
+    <pawnLabel>R4 worker</pawnLabel>
+    <gerundLabel>doing R4 bill work</gerundLabel>
+    <verb>do R4 bill work</verb>
+    <visible>false</visible>
+    <naturalPriority>0</naturalPriority>
+    <relevantSkills>
+      <li>Crafting</li>
+    </relevantSkills>
+  </WorkTypeDef>
+</Defs>

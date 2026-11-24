@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  R4 Special Thing Filters
+  
+  IMPORTANT: SpecialThingFilterDefs with allowedByDefault=false will be DISALLOWED
+  on EVERY ThingFilter in the game during ResolveReferences(). This means they act
+  as global blockers for all bills, stockpiles, etc. under their parentCategory.
+  
+  Currently we don't need any custom SpecialThingFilterDefs:
+  - Recycle bills accept all weapons/apparel via category filters
+  - Clean bills check for taint in WorkGiver_R4DoBill code
+  - Damaged item filtering uses the built-in HP slider
+  
+  This file is kept as a placeholder for future use. Any filters added here
+  must have allowedByDefault=true unless the intent is a global block.
+-->
+<Defs>
+  <!-- No custom filters needed at this time -->
+</Defs>

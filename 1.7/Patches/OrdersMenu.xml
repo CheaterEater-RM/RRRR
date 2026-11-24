@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+  <Operation Class="PatchOperationAdd">
+    <xpath>*/DesignationCategoryDef[defName="Orders"]/specialDesignatorClasses</xpath>
+    <value>
+      <li>RRRR.Designator_RecycleThing</li>
+      <li>RRRR.Designator_RepairThing</li>
+      <li>RRRR.Designator_CleanThing</li>
+    </value>
+  </Operation>
+</Patch>

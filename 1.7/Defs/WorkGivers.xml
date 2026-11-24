@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <!-- Designation-based WorkGivers. Bill-based repair/clean dispatch now uses
+       Patch_R4BillOrdering plus WorkGiver_R4UnifiedBill for orphan benches. -->
+
+  <WorkGiverDef>
+    <defName>RRRR_Recycle_Crafting</defName>
+    <label>recycle items (craft)</label>
+    <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>50</priorityInType>
+    <verb>recycle</verb>
+    <gerund>recycling designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Recycle_Smithing</defName>
+    <label>recycle items (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>50</priorityInType>
+    <verb>recycle</verb>
+    <gerund>recycling designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Recycle_Tailoring</defName>
+    <label>recycle items (tailor)</label>
+    <giverClass>RRRR.WorkGiver_R4Recycle</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>50</priorityInType>
+    <verb>recycle</verb>
+    <gerund>recycling designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Repair_Crafting</defName>
+    <label>repair items (craft)</label>
+    <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>55</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Repair_Smithing</defName>
+    <label>repair items (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>55</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Repair_Tailoring</defName>
+    <label>repair items (tailor)</label>
+    <giverClass>RRRR.WorkGiver_R4Repair</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>55</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing designated items</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Crafting</defName>
+    <label>clean tainted apparel (craft)</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Crafting</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Smithing</defName>
+    <label>clean tainted apparel (smith)</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Smithing</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_Clean_Tailoring</defName>
+    <label>clean tainted apparel (tailor)</label>
+    <giverClass>RRRR.WorkGiver_R4Clean</giverClass>
+    <workType>Tailoring</workType>
+    <priorityInType>45</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <requiredCapacities><li>Manipulation</li></requiredCapacities>
+  </WorkGiverDef>
+
+  <!-- Legacy no-op bill WorkGivers retained so active/queued jobs from older
+       saves can resolve Job.workGiverDef after the bill-ordering redesign. -->
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_CraftingSpot</defName>
+    <label>legacy R4 clean bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Tailor</defName>
+    <label>legacy R4 clean bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Smithy</defName>
+    <label>legacy R4 clean bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Machining</defName>
+    <label>legacy R4 clean bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_CleanBill_Fabrication</defName>
+    <label>legacy R4 clean bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>clean</verb>
+    <gerund>cleaning tainted apparel</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_CraftingSpot</defName>
+    <label>legacy R4 repair bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing items</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Tailor</defName>
+    <label>legacy R4 repair bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing items</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Smithy</defName>
+    <label>legacy R4 repair bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing items</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Machining</defName>
+    <label>legacy R4 repair bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing items</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+
+  <WorkGiverDef>
+    <defName>RRRR_RepairBill_Fabrication</defName>
+    <label>legacy R4 repair bill</label>
+    <giverClass>RRRR.WorkGiver_R4LegacyNoOp</giverClass>
+    <workType>RRRR_BillOnly</workType>
+    <priorityInType>0</priorityInType>
+    <verb>repair</verb>
+    <gerund>repairing items</gerund>
+    <scanThings>false</scanThings>
+    <directOrderable>false</directOrderable>
+    <canBeDoneByMechs>false</canBeDoneByMechs>
+  </WorkGiverDef>
+</Defs>

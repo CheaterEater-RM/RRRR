@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+  <KeyBindingCategoryDef>
+    <defName>R4_KeyCategory</defName>
+    <label>R4 Actions</label>
+  </KeyBindingCategoryDef>
+  <KeyBindingDef>
+    <defName>R4_CleanHotKey</defName>
+    <label>Clean item</label>
+    <category>R4_KeyCategory</category>
+    <defaultKeyCodeA>Q</defaultKeyCodeA>
+  </KeyBindingDef>
+
+  <KeyBindingDef>
+    <defName>R4_RepairHotKey</defName>
+    <label>Repair item</label>
+    <category>R4_KeyCategory</category>
+    <defaultKeyCodeA>R</defaultKeyCodeA>
+  </KeyBindingDef>
+
+  <KeyBindingDef>
+    <defName>R4_RecycleHotKey</defName>
+    <label>Recycle item</label>
+    <category>R4_KeyCategory</category>
+    <defaultKeyCodeA>V</defaultKeyCodeA>
+  </KeyBindingDef>
+</Defs>
