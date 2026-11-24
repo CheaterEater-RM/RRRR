@@ -10,6 +10,8 @@ namespace RRRR
         public static DesignationDef R4_Repair;
         public static DesignationDef R4_Clean;
 
+        public static StatDef R4_RepairAptitude;
+
         public static KeyBindingDef R4_CleanHotKey;
         public static KeyBindingDef R4_RepairHotKey;
         public static KeyBindingDef R4_RecycleHotKey;

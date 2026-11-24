@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- Scales the Crafting skill a pawn brings to R4 repairs. The glow part is vanilla's
+       WorkSpeedGlobal part; the capacity weights and caps are this mod's own. -->
+  <StatDef>
+    <defName>R4_RepairAptitude</defName>
+    <label>repair aptitude</label>
+    <description>How well this pawn's Crafting skill carries over to R4 repairs. It scales the effective skill of each repair cycle, so manipulation, sight and the light at the bench all count.</description>
+    <category>PawnWork</category>
+    <defaultBaseValue>1</defaultBaseValue>
+    <toStringStyle>PercentZero</toStringStyle>
+    <capacityFactors>
+      <li>
+        <capacity>Manipulation</capacity>
+        <weight>0.5</weight>
+        <max>1.5</max>
+      </li>
+      <li>
+        <capacity>Sight</capacity>
+        <weight>0.4</weight>
+        <max>1.5</max>
+      </li>
+    </capacityFactors>
+    <parts>
+      <li Class="StatPart_Glow">
+        <humanlikeOnly>true</humanlikeOnly>
+        <factorFromGlowCurve>
+          <points>
+            <li>(0,0.80)</li>
+            <li>(0.30,1.00)</li>
+          </points>
+        </factorFromGlowCurve>
+        <ignoreIfIncapableOfSight>true</ignoreIfIncapableOfSight>
+        <ignoreIfPrefersDarkness>true</ignoreIfPrefersDarkness>
+      </li>
+    </parts>
+  </StatDef>
+
+</Defs>

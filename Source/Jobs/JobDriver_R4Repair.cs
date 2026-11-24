@@ -42,7 +42,8 @@ namespace RRRR
         protected override void ApplyWorkResult(Thing item, Pawn worker)
         {
             int skillLevel = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-            SkillUtility.RepairOdds(skillLevel, item.def.techLevel, out float successChance, out float criticalShare);
+            float aptitude = worker?.GetStatValue(R4DefOf.R4_RepairAptitude) ?? 1f;
+            SkillUtility.RepairOdds(skillLevel * aptitude, item.def.techLevel, out float successChance, out float criticalShare);
 
             if (Rand.Chance(successChance))
             {
