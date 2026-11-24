@@ -9,6 +9,8 @@
     <description>How well this pawn's Crafting skill carries over to R4 repairs. It scales the effective skill of each repair cycle, so manipulation, sight and the light at the bench all count.</description>
     <category>PawnWork</category>
     <defaultBaseValue>1</defaultBaseValue>
+    <!-- Keeps this out of scenario stat factors, so no save can refer to it. -->
+    <forInformationOnly>true</forInformationOnly>
     <toStringStyle>PercentZero</toStringStyle>
     <capacityFactors>
       <li>
