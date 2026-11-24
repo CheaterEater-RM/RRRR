@@ -262,8 +262,8 @@ namespace RRRR
                 sb.AppendLine("R4_Desc_FreeCycles".Translate().ToString());
             }
 
-            float techDiff   = SkillUtility.GetTechDifficulty(t.def);
-            float successPct = SkillUtility.RepairSuccessChance(EstimateSkillLevel, techDiff);
+            // Aptitude 1.0: no pawn is known to the tooltip, so it estimates an average repairer.
+            SkillUtility.RepairOdds(EstimateSkillLevel, t.def.techLevel, out float successPct, out _);
             sb.AppendLine();
             sb.AppendLine("R4_Desc_SuccessChance".Translate(EstimateSkillLevel, successPct.ToStringPercent()).ToString());
 

@@ -5,79 +5,45 @@ using Verse;
 namespace RRRR
 {
     /// <summary>
-    /// Skill-related calculations for repair: tech difficulty, success chance,
+    /// Skill-related calculations for repair: the odds curve, critical share,
     /// and failure severity.
     /// </summary>
     public static class SkillUtility
     {
-        // Tech difficulty multipliers indexed by TechLevel ordinal.
-        // Higher = harder to repair (lower success chance).
-        private static readonly float[] TechDifficultyMap =
-        {
-            1.00f, // Undefined
-            0.80f, // Animal
-            0.80f, // Neolithic
-            0.90f, // Medieval
-            1.00f, // Industrial
-            1.30f, // Spacer
-            1.60f, // Ultra
-            2.00f  // Archotech
-        };
+        // Indexed by TechLevel ordinal: Undefined, Animal, Neolithic, Medieval,
+        // Industrial, Spacer, Ultra, Archotech. P0 is success at effective skill 0;
+        // S is the effective skill at which success is certain.
+        private static readonly float[] RepairP0 = { 0.60f, 0.70f, 0.70f, 0.65f, 0.60f, 0.45f, 0.35f, 0.25f };
+        private static readonly float[] RepairS  = { 10f,   6f,    6f,    8f,    10f,   14f,   18f,   20f   };
 
         /// <summary>
-        /// Get the tech difficulty multiplier for an item based on its tech level.
-        /// Higher = harder to repair. Falls back to Industrial (1.0) if unknown.
+        /// Per-cycle repair odds for an effective skill (Crafting level × repair aptitude)
+        /// on a tech level. Pure, so the simulation tool can call it. Undefined reads as
+        /// Industrial and an out-of-range value reads as Industrial.
         /// </summary>
-        public static float GetTechDifficulty(ThingDef def)
+        public static void RepairOdds(float effectiveSkill, TechLevel tier, out float success, out float criticalShare)
         {
-            TechLevel level = TechLevel.Undefined;
+            int idx = (int)tier;
+            if (idx >= RepairP0.Length)
+                idx = (int)TechLevel.Industrial;
 
-            if (def.recipeMaker?.researchPrerequisite != null)
-            {
-                level = def.recipeMaker.researchPrerequisite.techLevel;
-            }
-            else if (def.recipeMaker?.researchPrerequisites != null)
-            {
-                for (int i = 0; i < def.recipeMaker.researchPrerequisites.Count; i++)
-                {
-                    var rp = def.recipeMaker.researchPrerequisites[i];
-                    if (rp != null && rp.techLevel > level)
-                        level = rp.techLevel;
-                }
-            }
-
-            if (level == TechLevel.Undefined)
-                level = TechLevel.Industrial;
-
-            int idx = (int)level;
-            if (idx >= 0 && idx < TechDifficultyMap.Length)
-                return TechDifficultyMap[idx];
-
-            return 1.0f;
+            float p0 = RepairP0[idx];
+            float f = Mathf.Clamp01(effectiveSkill / RepairS[idx]);
+            success = f >= 1f ? 1f : p0 + (1f - p0) * f;
+            criticalShare = 0.20f * (1f - f);
         }
 
         /// <summary>
-        /// Success chance per repair cycle.
-        /// Formula: (0.50 + skill × 0.025) / techDifficulty, clamped to [0.05, 1.0].
+        /// Returns true if a failed repair is critical: item HP below 50% and a roll at
+        /// criticalShare succeeds.
         /// </summary>
-        public static float RepairSuccessChance(int skillLevel, float techDifficulty)
-        {
-            float baseChance = 0.50f + skillLevel * 0.025f;
-            float chance = baseChance / Mathf.Max(techDifficulty, 0.1f);
-            return Mathf.Clamp(chance, 0.05f, 1.0f);
-        }
-
-        /// <summary>
-        /// Returns true if this failure should be a critical failure.
-        /// Critical failures only occur when item HP is below 50%, at a 20% rate.
-        /// </summary>
-        public static bool IsCriticalFailure(Thing item)
+        public static bool IsCriticalFailure(Thing item, float criticalShare)
         {
             if (!item.def.useHitPoints || item.MaxHitPoints <= 0)
                 return false;
             if ((float)item.HitPoints / item.MaxHitPoints >= 0.50f)
                 return false;
-            return Rand.Chance(0.20f);
+            return Rand.Chance(criticalShare);
         }
 
         /// <summary>Apply minor failure: 5% HP loss.</summary>

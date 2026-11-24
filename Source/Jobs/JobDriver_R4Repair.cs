@@ -41,9 +41,8 @@ namespace RRRR
 
         protected override void ApplyWorkResult(Thing item, Pawn worker)
         {
-            int skillLevel       = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
-            float techDifficulty = SkillUtility.GetTechDifficulty(item.def);
-            float successChance  = SkillUtility.RepairSuccessChance(skillLevel, techDifficulty);
+            int skillLevel = worker?.skills?.GetSkill(SkillDefOf.Crafting)?.Level ?? 0;
+            SkillUtility.RepairOdds(skillLevel, item.def.techLevel, out float successChance, out float criticalShare);
 
             if (Rand.Chance(successChance))
             {
@@ -53,7 +52,7 @@ namespace RRRR
             }
             else
             {
-                if (SkillUtility.IsCriticalFailure(item))
+                if (SkillUtility.IsCriticalFailure(item, criticalShare))
                 {
                     SkillUtility.ApplyCriticalFailure(item);
                     Messages.Message("R4_RepairCriticalFailure".Translate(worker.LabelShort, item.LabelCap),
