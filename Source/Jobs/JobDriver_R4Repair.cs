@@ -53,7 +53,7 @@ namespace RRRR
             }
             else
             {
-                if (SkillUtility.IsCriticalFailure(item, criticalShare))
+                if (RRRR_Mod.Settings.allowCriticalFailures && SkillUtility.IsCriticalFailure(item, criticalShare))
                 {
                     SkillUtility.ApplyCriticalFailure(item);
                     Messages.Message("R4_RepairCriticalFailure".Translate(worker.LabelShort, item.LabelCap),

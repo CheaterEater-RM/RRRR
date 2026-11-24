@@ -50,6 +50,9 @@ namespace RRRR
         /// </summary>
         public float minorMendingThreshold = 0.95f;
 
+        /// <summary>If false, a failed repair is never critical: it is always a minor failure.</summary>
+        public bool allowCriticalFailures = true;
+
         // ── Clean ─────────────────────────────────────────────────────────────
         /// <summary>
         /// Material cost for one cleaning operation as a fraction of make cost.
@@ -88,6 +91,7 @@ namespace RRRR
             Scribe_Values.Look(ref skipIntricateComponents, "skipIntricateComponents", false);
             Scribe_Values.Look(ref repairHpPerCycle,        "repairHpPerCycle",        0.20f);
             Scribe_Values.Look(ref minorMendingThreshold,   "minorMendingThreshold",   0.95f);
+            Scribe_Values.Look(ref allowCriticalFailures,   "allowCriticalFailures",   true);
             Scribe_Values.Look(ref cleanCostFraction,       "cleanCostFraction",       0.20f);
             Scribe_Values.Look(ref stripSmelterBills,       "stripSmelterBills",       true);
         }
@@ -99,6 +103,7 @@ namespace RRRR
             skipIntricateComponents = false;
             repairHpPerCycle        = 0.20f;
             minorMendingThreshold   = 0.95f;
+            allowCriticalFailures   = true;
             cleanCostFraction       = 0.20f;
             stripSmelterBills       = true;
         }
@@ -113,6 +118,7 @@ namespace RRRR
                 && skipIntricateComponents == other.skipIntricateComponents
                 && Mathf.Approximately(repairHpPerCycle, other.repairHpPerCycle)
                 && Mathf.Approximately(minorMendingThreshold, other.minorMendingThreshold)
+                && allowCriticalFailures == other.allowCriticalFailures
                 && Mathf.Approximately(cleanCostFraction, other.cleanCostFraction)
                 && stripSmelterBills == other.stripSmelterBills;
         }
@@ -126,6 +132,7 @@ namespace RRRR
                 skipIntricateComponents = skipIntricateComponents,
                 repairHpPerCycle = repairHpPerCycle,
                 minorMendingThreshold = minorMendingThreshold,
+                allowCriticalFailures = allowCriticalFailures,
                 cleanCostFraction = cleanCostFraction,
                 stripSmelterBills = stripSmelterBills,
             };
@@ -205,6 +212,11 @@ namespace RRRR
                 + $": {Settings.minorMendingThreshold:P0}",
                 tooltip: "R4_Settings_MinorMendingThreshold_Tip".Translate());
             Settings.minorMendingThreshold = Mathf.Round(listing.Slider(Settings.minorMendingThreshold, 0.70f, 1.00f) * 100f) / 100f;
+
+            listing.CheckboxLabeled(
+                "R4_Settings_AllowCritical".Translate(),
+                ref Settings.allowCriticalFailures,
+                "R4_Settings_AllowCritical_Tip".Translate());
 
             listing.Gap();
 

@@ -68,6 +68,8 @@
   <R4_Settings_RepairHpPerCycle>HP restored per cycle</R4_Settings_RepairHpPerCycle>
   <R4_Settings_MinorMendingThreshold>Minor mending threshold</R4_Settings_MinorMendingThreshold>
   <R4_Settings_MinorMendingThreshold_Tip>Items at or above this HP fraction are repaired for free without consuming repair materials.</R4_Settings_MinorMendingThreshold_Tip>
+  <R4_Settings_AllowCritical>Allow critical repair failures</R4_Settings_AllowCritical>
+  <R4_Settings_AllowCritical_Tip>A failed repair on an item below half HP can be critical: it loses 15% HP and may drop one quality level, permanently. Critical failures get rarer as repair skill rises. Turn off to make every failure a minor one: 5% HP lost, no quality loss.</R4_Settings_AllowCritical_Tip>
   <R4_Settings_RepairCyclesNote>{0} cycles to fully repair</R4_Settings_RepairCyclesNote>
 
   <R4_Settings_CleanHeader>Clean Settings</R4_Settings_CleanHeader>
